@@ -1,5 +1,6 @@
 from typing import Optional, List
 from sqlmodel import SQLModel, Field
+from datetime import datetime
 
 # --- Base y Entrada ---
 class CategoriaBase(SQLModel):
@@ -20,7 +21,7 @@ class CategoriaUpdate(SQLModel):
 # --- Salida ---
 class CategoriaRead(CategoriaBase):
     id: int
-    deleted_at : bool
+    deleted_at : Optional[datetime]
 
 class CategoriaList(SQLModel):
     """Respuesta paginada según el estándar de la unidad 4-actividad 1-endpoinds optimizados"""

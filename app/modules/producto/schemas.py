@@ -39,9 +39,9 @@ class ProductoCreate(ProductoBase):
     ingrediente_ids: List[int] = []
 
 class ProductoUpdate(SQLModel):
-    nombre: Optional[str] = None
-    precio_base: Optional[Decimal] = None
-    stock_cantidad: Optional[int] = None
+    nombre: Optional[str] = Field(default=None, min_length=2, max_length=150)
+    precio_base: Optional[Decimal] = Field(default=None, ge=0)
+    stock_cantidad: Optional[int] = Field(default=None, ge=0)
     disponible: Optional[bool] = None
 
 class ProductoRead(ProductoBase):
