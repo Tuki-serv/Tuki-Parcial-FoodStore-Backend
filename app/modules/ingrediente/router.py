@@ -1,7 +1,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from app.core.database import SessionDep
-from app.modules.ingrediente.schemas import IngredienteRead, IngredienteCreate, IngredienteUpdate, IngredienteList
+from app.modules.ingrediente.schemas import IngredienteRead, IngredienteCreate, IngredienteUpdate, IngredienteList, IngredienteFullRead
 from app.modules.ingrediente.service import IngredienteService
 from app.modules.ingrediente.unit_of_work import IngredienteUnitOfWork
 
@@ -21,7 +21,7 @@ def list_ingredientes(
 ):
     return service.get_all(offset=offset, limit=limit)
 
-@router.get("/{id}", response_model=IngredienteRead)
+@router.get("/{id}", response_model=IngredienteFullRead)
 def get_ingrediente(id: int, service: IngredienteServiceDep):
     return service.get_by_id(id)
 

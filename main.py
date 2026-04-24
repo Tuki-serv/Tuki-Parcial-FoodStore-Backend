@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from sqlmodel import SQLModel
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import engine
 
@@ -22,6 +23,20 @@ def create_app() -> FastAPI:
         description="Parcial Programación IV - Implementación Profesional de Relaciones Complejas",
         version="1.0.0",
         lifespan=lifespan
+    )
+
+    origenes_permitidos = [
+        "http://localhost:5173",  # Puerto por defecto de Vite (React)
+        "http://localhost:3000",  # Puerto por defecto de Create React App
+        "http://127.0.0.1:5173",
+    ]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origenes_permitidos, # URLs permitidas
+        allow_credentials=True,
+        allow_methods=["*"], # Permite todos los métodos HTTP
+        allow_headers=["*"], # Permite todos los headers
     )
 
     

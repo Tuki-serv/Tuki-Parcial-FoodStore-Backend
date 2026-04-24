@@ -2,6 +2,7 @@ from sqlmodel import Session, select, func
 from sqlalchemy.orm import selectinload
 from app.core.repository import BaseRepository
 from app.modules.ingrediente.models import Ingrediente
+from app.modules.producto_ingrediente.models import ProductoIngrediente
 from typing import Optional
 
 class IngredienteRepository(BaseRepository[Ingrediente]):
@@ -12,7 +13,10 @@ class IngredienteRepository(BaseRepository[Ingrediente]):
         statement = (
             select(Ingrediente)
             .where(Ingrediente.id == record_id)
-            .options(selectinload(Ingrediente.productos_links))
+            .options(
+                selectinload(Ingrediente.productos_links)
+                .selectinload(ProductoIngrediente.producto)
+                )
         )
         return self.session.exec(statement).first()
 

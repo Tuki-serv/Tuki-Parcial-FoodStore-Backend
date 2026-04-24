@@ -1,6 +1,18 @@
 from typing import Optional, List
 from sqlmodel import SQLModel, Field
 from datetime import datetime
+from pydantic import BaseModel
+
+# --- Esquemas auxiliares para las relaciones ---
+class ProductoMin(BaseModel):
+    id: int
+    nombre: str
+    precio_base: float
+
+class CategoriaProductoLink(BaseModel):
+    producto_id: int
+    es_principal: bool
+    producto: Optional[ProductoMin] = None
 
 # --- Base y Entrada ---
 class CategoriaBase(SQLModel):
@@ -30,4 +42,6 @@ class CategoriaList(SQLModel):
 
 class CategoriaWithChildren(CategoriaRead):
     """Para mostrar el árbol en el Frontend"""
+    parent: Optional["CategoriaRead"] = None
     hijos: List["CategoriaRead"] = []
+    productos_links: List[CategoriaProductoLink] = []

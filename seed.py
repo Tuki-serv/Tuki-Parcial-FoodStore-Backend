@@ -16,69 +16,135 @@ def seed():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        # Categorías
-        hamburguesas = Categoria(nombre="Hamburguesas", descripcion="Hamburguesas artesanales")
-        bebidas      = Categoria(nombre="Bebidas", descripcion="Bebidas frías y calientes")
-        sin_tacc     = Categoria(nombre="Sin TACC", descripcion="Opciones libres de gluten", parent_id=None)
-        session.add_all([hamburguesas, bebidas, sin_tacc])
+
+        # ── CATEGORÍAS ──────────────────────────────────────────────
+        hamburguesas = Categoria(nombre="Hamburguesas", descripcion="Nuestras burgers artesanales")
+        bebidas      = Categoria(nombre="Bebidas",      descripcion="Frias y calientes")
+        postres      = Categoria(nombre="Postres",      descripcion="Para cerrar con dulzura")
+        session.add_all([hamburguesas, bebidas, postres])
         session.flush()
 
-        # Subcategoría (hija de hamburguesas)
-        veganas = Categoria(nombre="Veganas", descripcion="Hamburguesas veganas", parent_id=hamburguesas.id)
-        session.add(veganas)
+        # Subcategorías
+        veganas     = Categoria(nombre="Veganas",       descripcion="100% plant-based",         parent_id=hamburguesas.id)
+        sin_tacc    = Categoria(nombre="Sin TACC",      descripcion="Libres de gluten",          parent_id=hamburguesas.id)
+        gaseosas    = Categoria(nombre="Gaseosas",      descripcion="Bebidas con gas",           parent_id=bebidas.id)
+        session.add_all([veganas, sin_tacc, gaseosas])
         session.flush()
 
-        # Ingredientes
-        pan        = Ingrediente(nombre="Pan brioche",      es_alergeno=True)
-        carne      = Ingrediente(nombre="Carne vacuna",     es_alergeno=False)
-        queso      = Ingrediente(nombre="Queso cheddar",    es_alergeno=True)
-        lechuga    = Ingrediente(nombre="Lechuga",          es_alergeno=False)
-        tomate     = Ingrediente(nombre="Tomate",           es_alergeno=False)
-        hamburguesa_vegana = Ingrediente(nombre="Medallón vegano", es_alergeno=False)
-        session.add_all([pan, carne, queso, lechuga, tomate, hamburguesa_vegana])
+        # ── INGREDIENTES ─────────────────────────────────────────────
+        pan_brioche  = Ingrediente(nombre="Pan Brioche",       descripcion="Pan suave y esponjoso",       es_alergeno=True)
+        pan_sin_tacc = Ingrediente(nombre="Pan Sin TACC",      descripcion="Pan libre de gluten",         es_alergeno=False)
+        carne_250    = Ingrediente(nombre="Carne Vacuna 250g", descripcion="Medallón de res premium",     es_alergeno=False)
+        medallon_veg = Ingrediente(nombre="Medallón Vegano",   descripcion="Base de legumbres y avena",   es_alergeno=False)
+        queso_ch     = Ingrediente(nombre="Queso Cheddar",     descripcion="Cheddar fundido americano",   es_alergeno=True)
+        queso_veg    = Ingrediente(nombre="Queso Vegano",      descripcion="Alternativa plant-based",     es_alergeno=False)
+        lechuga      = Ingrediente(nombre="Lechuga",           descripcion="Lechuga fresca",              es_alergeno=False)
+        tomate       = Ingrediente(nombre="Tomate",            descripcion="Tomate perita en rodajas",    es_alergeno=False)
+        cebolla_c    = Ingrediente(nombre="Cebolla Caramelizada", descripcion="Cebolla dulce",            es_alergeno=False)
+        bacon        = Ingrediente(nombre="Bacon Crocante",    descripcion="Panceta ahumada",             es_alergeno=False)
+        salsa_bbq    = Ingrediente(nombre="Salsa BBQ",         descripcion="Salsa ahumada casera",        es_alergeno=False)
+        mayonesa     = Ingrediente(nombre="Mayonesa",          descripcion="Mayo artesanal",              es_alergeno=True)
+        session.add_all([pan_brioche, pan_sin_tacc, carne_250, medallon_veg,
+                         queso_ch, queso_veg, lechuga, tomate,
+                         cebolla_c, bacon, salsa_bbq, mayonesa])
         session.flush()
 
-        # Productos
+        # ── PRODUCTOS ────────────────────────────────────────────────
         clasica = Producto(
             nombre="Hamburguesa Clásica",
-            descripcion="La clásica con cheddar y lechuga",
+            descripcion="La de siempre, perfecta de siempre.",
             precio_base=Decimal("1500.00"),
-            imagenes_url=["https://via.placeholder.com/300"],
+            imagenes_url=["https://via.placeholder.com/400x300?text=Clasica"],
             stock_cantidad=50,
         )
-        vegana = Producto(
-            nombre="Hamburguesa Vegana",
-            descripcion="100% plant-based",
-            precio_base=Decimal("1800.00"),
-            imagenes_url=["https://via.placeholder.com/300"],
+        bbq = Producto(
+            nombre="Burger BBQ Bacon",
+            descripcion="Ahumada, crocante y con todo.",
+            precio_base=Decimal("1900.00"),
+            imagenes_url=["https://via.placeholder.com/400x300?text=BBQ"],
             stock_cantidad=30,
+        )
+        vegana = Producto(
+            nombre="Burger Vegana",
+            descripcion="Plant-based sin culpa.",
+            precio_base=Decimal("1800.00"),
+            imagenes_url=["https://via.placeholder.com/400x300?text=Vegana"],
+            stock_cantidad=25,
+        )
+        sin_tacc_prod = Producto(
+            nombre="Burger Sin TACC",
+            descripcion="Para celíacos, sin sacrificar sabor.",
+            precio_base=Decimal("1700.00"),
+            imagenes_url=["https://via.placeholder.com/400x300?text=SinTACC"],
+            stock_cantidad=20,
         )
         coca = Producto(
             nombre="Coca-Cola 500ml",
+            descripcion="La clásica bien fría.",
             precio_base=Decimal("800.00"),
             stock_cantidad=100,
         )
-        session.add_all([clasica, vegana, coca])
+        limonada = Producto(
+            nombre="Limonada Natural",
+            descripcion="Exprimida al momento.",
+            precio_base=Decimal("700.00"),
+            stock_cantidad=60,
+        )
+        session.add_all([clasica, bbq, vegana, sin_tacc_prod, coca, limonada])
         session.flush()
 
-        # Links ProductoCategoria
-        session.add(ProductoCategoria(producto_id=clasica.id, categoria_id=hamburguesas.id, es_principal=True))
-        session.add(ProductoCategoria(producto_id=vegana.id,  categoria_id=hamburguesas.id, es_principal=True))
-        session.add(ProductoCategoria(producto_id=vegana.id,  categoria_id=veganas.id,      es_principal=False))
-        session.add(ProductoCategoria(producto_id=vegana.id,  categoria_id=sin_tacc.id,     es_principal=False))
-        session.add(ProductoCategoria(producto_id=coca.id,    categoria_id=bebidas.id,      es_principal=True))
+        # ── PRODUCTO ↔ CATEGORIA ──────────────────────────────────────
+        session.add(ProductoCategoria(producto_id=clasica.id,      categoria_id=hamburguesas.id, es_principal=True))
 
-        # Links ProductoIngrediente
-        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=pan.id,    es_removible=False))
-        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=carne.id,  es_removible=False))
-        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=queso.id,  es_removible=True))
-        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=lechuga.id,es_removible=True))
-        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=tomate.id, es_removible=True))
-        session.add(ProductoIngrediente(producto_id=vegana.id,  ingrediente_id=hamburguesa_vegana.id, es_removible=False))
-        session.add(ProductoIngrediente(producto_id=vegana.id,  ingrediente_id=lechuga.id,es_removible=True))
+        session.add(ProductoCategoria(producto_id=bbq.id,          categoria_id=hamburguesas.id, es_principal=True))
+
+        session.add(ProductoCategoria(producto_id=vegana.id,       categoria_id=hamburguesas.id, es_principal=True))
+        session.add(ProductoCategoria(producto_id=vegana.id,       categoria_id=veganas.id,      es_principal=False))
+
+        session.add(ProductoCategoria(producto_id=sin_tacc_prod.id,categoria_id=hamburguesas.id, es_principal=True))
+        session.add(ProductoCategoria(producto_id=sin_tacc_prod.id,categoria_id=sin_tacc.id,     es_principal=False))
+
+        session.add(ProductoCategoria(producto_id=coca.id,         categoria_id=bebidas.id,      es_principal=True))
+        session.add(ProductoCategoria(producto_id=coca.id,         categoria_id=gaseosas.id,     es_principal=False))
+
+        session.add(ProductoCategoria(producto_id=limonada.id,     categoria_id=bebidas.id,      es_principal=True))
+
+        # ── PRODUCTO ↔ INGREDIENTE ────────────────────────────────────
+        # Clásica
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=pan_brioche.id, es_removible=False))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=carne_250.id,   es_removible=False))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=queso_ch.id,    es_removible=True))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=lechuga.id,     es_removible=True))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=tomate.id,      es_removible=True))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=mayonesa.id,    es_removible=True))
+
+        # BBQ Bacon
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=pan_brioche.id,  es_removible=False))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=carne_250.id,    es_removible=False))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=bacon.id,        es_removible=True))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=queso_ch.id,     es_removible=True))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=cebolla_c.id,    es_removible=True))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=salsa_bbq.id,    es_removible=True))
+
+        # Vegana
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=pan_brioche.id,  es_removible=False))
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=medallon_veg.id, es_removible=False))
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=queso_veg.id,    es_removible=True))
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=lechuga.id,      es_removible=True))
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=tomate.id,       es_removible=True))
+
+        # Sin TACC
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=pan_sin_tacc.id, es_removible=False))
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=carne_250.id,    es_removible=False))
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=queso_ch.id,     es_removible=True))
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=lechuga.id,      es_removible=True))
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=tomate.id,       es_removible=True))
 
         session.commit()
-        print("🌱 Seed OK: 4 categorías, 6 ingredientes, 3 productos creados.")
+        print("🌱 Seed OK:")
+        print(f"   • 6 categorías (3 principales + 3 subcategorías)")
+        print(f"   • 12 ingredientes")
+        print(f"   • 6 productos con categorías e ingredientes asignados")
 
 if __name__ == "__main__":
     seed()

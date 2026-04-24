@@ -1,0 +1,1749 @@
+======================================================================
+DIRECTORIO: C:\cosas\UTN\Cursos\4-cuarto semestre\programacion 4\Evaluaciones\Parcial 1\FoodStore-Backend
+ARCHIVOS INCLUIDOS: 42
+======================================================================
+
+── ESTRUCTURA ──
+
+C:\cosas\UTN\Cursos\4-cuarto semestre\programacion 4\Evaluaciones\Parcial 1\FoodStore-Backend
+├── .gitignore
+├── Variables de entorno.md
+├── diringest.py
+├── docker-compose.yml
+├── main.py
+├── requirements.txt
+├── reset.py
+├── seed.py
+📁 app
+    ├── __init__.py
+    📁 core
+        ├── __init__.py
+        ├── config.py
+        ├── database.py
+        ├── repository.py
+        ├── unit_of_work.py
+    📁 modules
+        ├── __init__.py
+        📁 categoria
+            ├── __init__.py
+            ├── models.py
+            ├── repository.py
+            ├── router.py
+            ├── schemas.py
+            ├── service.py
+            ├── unit_of_work.py
+        📁 ingrediente
+            ├── __init__.py
+            ├── models.py
+            ├── repository.py
+            ├── router.py
+            ├── schemas.py
+            ├── service.py
+            ├── unit_of_work.py
+        📁 producto
+            ├── __init__.py
+            ├── models.py
+            ├── repository.py
+            ├── router.py
+            ├── schemas.py
+            ├── service.py
+            ├── unit_of_work.py
+        📁 producto_categoria
+            ├── __init__.py
+            ├── models.py
+        📁 producto_ingrediente
+            ├── __init__.py
+            ├── models.py
+    📁 utils
+        ├── __init__.py
+        ├── errores.py
+
+
+── CONTENIDO DE ARCHIVOS ──
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: .gitignore
+──────────────────────────────────────────────────────────────────────
+# Variables de entorno
+.env
+
+# Entornos virtuales
+.venv/
+venv/
+
+# Caché compilada de Python (¡Sin barra inicial para que actúe de forma global!)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos generados localmente
+diringest_output.txt
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: Variables de entorno.md
+──────────────────────────────────────────────────────────────────────
+```
+POSTGRES_DB={}
+
+POSTGRES_USER={}
+
+POSTGRES_PASSWORD={}
+
+DATABASE_URL = "postgresql+psycopg://{user}:{password}@localhost:5432/{db_name}"
+```
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: diringest.py
+──────────────────────────────────────────────────────────────────────
+#!/usr/bin/env python3
+"""
+diringest.py — Convierte un directorio local en un único archivo de texto plano,
+listo para usar como contexto en un LLM (estilo GitIngest pero sin git).
+
+Uso:
+    python diringest.py                  # directorio actual
+    python diringest.py /ruta/al/proyecto
+    python diringest.py /ruta --output resultado.txt
+"""
+
+import os
+import sys
+import argparse
+from pathlib import Path
+
+# ── Archivos/carpetas ignorados por defecto ────────────────────────────────────
+DEFAULT_IGNORE_DIRS = {
+    ".git", ".svn", ".hg",
+    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    "node_modules", ".npm", ".yarn",
+    "venv", ".venv", "env", ".env",
+    "dist", "build", "out", ".next", ".nuxt",
+    ".idea", ".vscode",
+    "coverage", ".coverage",
+}
+
+DEFAULT_IGNORE_FILES = {
+    ".DS_Store", "Thumbs.db", "desktop.ini",
+    "*.pyc", "*.pyo", "*.pyd",
+    "*.class", "*.o", "*.obj", "*.exe", "*.dll", "*.so", "*.dylib",
+    "*.zip", "*.tar", "*.gz", "*.rar", "*.7z",
+    "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.ico", "*.svg", "*.webp",
+    "*.mp3", "*.mp4", "*.wav", "*.avi", "*.mov",
+    "*.pdf", "*.doc", "*.docx", "*.xls", "*.xlsx",
+    "*.lock",           # package-lock.json, yarn.lock, Pipfile.lock, etc.
+    "*.min.js", "*.min.css",
+}
+
+MAX_FILE_SIZE_MB = 1  # archivos más grandes se omiten
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def load_gitignore(root: Path) -> list[str]:
+    """Lee .gitignore del directorio raíz y devuelve los patrones."""
+    gitignore = root / ".gitignore"
+    if not gitignore.exists():
+        return []
+    patterns = []
+    for line in gitignore.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            patterns.append(line)
+    return patterns
+
+
+def matches_gitignore(path: Path, root: Path, patterns: list[str]) -> bool:
+    """Comprobación simple de patrones .gitignore (sin dependencias externas)."""
+    rel = path.relative_to(root)
+    rel_str = str(rel).replace("\\", "/")
+    name = path.name
+
+    for pattern in patterns:
+        # Patrón de directorio (termina en /)
+        p = pattern.rstrip("/")
+        # Coincidencia por nombre
+        if _fnmatch(name, p):
+            return True
+        # Coincidencia por ruta relativa
+        if _fnmatch(rel_str, p):
+            return True
+        # Patrón con slash → relativo a la raíz
+        if "/" in p and _fnmatch(rel_str, p.lstrip("/")):
+            return True
+    return False
+
+
+def _fnmatch(name: str, pattern: str) -> bool:
+    import fnmatch
+    return fnmatch.fnmatch(name, pattern)
+
+
+def matches_default_ignore(path: Path) -> bool:
+    import fnmatch
+    if path.is_dir():
+        return path.name in DEFAULT_IGNORE_DIRS
+    for pat in DEFAULT_IGNORE_FILES:
+        if fnmatch.fnmatch(path.name, pat):
+            return True
+    return False
+
+
+def is_binary(filepath: Path) -> bool:
+    """Detecta si un archivo es binario leyendo los primeros 8 KB."""
+    try:
+        with open(filepath, "rb") as f:
+            chunk = f.read(8192)
+        return b"\x00" in chunk
+    except OSError:
+        return True
+
+
+def collect_files(root: Path, gitignore_patterns: list[str]) -> list[Path]:
+    """Recorre el directorio y devuelve los archivos a incluir, ordenados."""
+    files = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        current = Path(dirpath)
+
+        # Filtrar subdirectorios in-place para que os.walk no los visite
+        dirnames[:] = sorted([
+            d for d in dirnames
+            if not matches_default_ignore(current / d)
+            and not matches_gitignore(current / d, root, gitignore_patterns)
+        ])
+
+        for fname in sorted(filenames):
+            fpath = current / fname
+            if matches_default_ignore(fpath):
+                continue
+            if matches_gitignore(fpath, root, gitignore_patterns):
+                continue
+            files.append(fpath)
+
+    return files
+
+
+# ── Generador principal ────────────────────────────────────────────────────────
+
+def build_tree(root: Path, files: list[Path]) -> str:
+    """Genera un árbol de directorios estilo Unix."""
+    lines = [str(root.resolve())]
+    seen_dirs: set[Path] = set()
+    entries: list[tuple[Path, bool]] = []  # (path, is_file)
+
+    for f in files:
+        # Agregar directorios intermedios
+        for parent in reversed(f.relative_to(root).parents):
+            if parent == Path("."):
+                continue
+            abs_parent = root / parent
+            if abs_parent not in seen_dirs:
+                seen_dirs.add(abs_parent)
+                entries.append((abs_parent, False))
+        entries.append((f, True))
+
+    for path, is_file in entries:
+        rel = path.relative_to(root)
+        depth = len(rel.parts) - 1
+        prefix = "    " * depth + ("├── " if is_file else "📁 ")
+        lines.append(prefix + path.name)
+
+    return "\n".join(lines)
+
+
+def ingest(root: Path, output: Path | None = None) -> None:
+    print(f"📂 Procesando: {root.resolve()}")
+
+    gitignore_patterns = load_gitignore(root)
+    files = collect_files(root, gitignore_patterns)
+
+    sections = []
+
+    # ── Encabezado ──────────────────────────────────────────────────────────
+    sections.append(f"{'='*70}")
+    sections.append(f"DIRECTORIO: {root.resolve()}")
+    sections.append(f"ARCHIVOS INCLUIDOS: {len(files)}")
+    sections.append(f"{'='*70}\n")
+
+    # ── Árbol ───────────────────────────────────────────────────────────────
+    sections.append("── ESTRUCTURA ──\n")
+    sections.append(build_tree(root, files))
+    sections.append("")
+
+    # ── Contenido ───────────────────────────────────────────────────────────
+    sections.append("\n── CONTENIDO DE ARCHIVOS ──\n")
+
+    skipped = []
+    for fpath in files:
+        rel = fpath.relative_to(root)
+        size_mb = fpath.stat().st_size / (1024 * 1024)
+
+        header = f"\n{'─'*70}\nARCHIVO: {rel}\n{'─'*70}"
+
+        if size_mb > MAX_FILE_SIZE_MB:
+            skipped.append(str(rel))
+            sections.append(header)
+            sections.append(f"[omitido — tamaño {size_mb:.1f} MB supera el límite de {MAX_FILE_SIZE_MB} MB]")
+            continue
+
+        if is_binary(fpath):
+            skipped.append(str(rel))
+            sections.append(header)
+            sections.append("[omitido — archivo binario]")
+            continue
+
+        try:
+            content = fpath.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            sections.append(header)
+            sections.append(f"[error al leer: {e}]")
+            continue
+
+        sections.append(header)
+        sections.append(content)
+
+    # ── Resumen final ────────────────────────────────────────────────────────
+    if skipped:
+        sections.append(f"\n{'='*70}")
+        sections.append(f"ARCHIVOS OMITIDOS ({len(skipped)}):")
+        for s in skipped:
+            sections.append(f"  - {s}")
+
+    result = "\n".join(sections)
+
+    # ── Guardar o imprimir ───────────────────────────────────────────────────
+    if output is None:
+        output = root / "diringest_output.txt"
+
+    output.write_text(result, encoding="utf-8")
+    print(f"✅ Listo: {output.resolve()}")
+    print(f"   {len(files)} archivos procesados, {len(skipped)} omitidos")
+    print(f"   Tamaño del output: {output.stat().st_size / 1024:.1f} KB")
+
+
+# ── CLI ────────────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Convierte un directorio en un archivo de texto plano para LLMs."
+    )
+    parser.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Directorio a procesar (por defecto: directorio actual)",
+    )
+    parser.add_argument(
+        "--output", "-o",
+        help="Archivo de salida (por defecto: diringest_output.txt dentro del directorio)",
+    )
+    args = parser.parse_args()
+
+    root = Path(args.directory).resolve()
+    if not root.is_dir():
+        print(f"❌ Error: '{root}' no es un directorio válido.")
+        sys.exit(1)
+
+    output = Path(args.output).resolve() if args.output else None
+    ingest(root, output)
+
+
+if __name__ == "__main__":
+    main()
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: docker-compose.yml
+──────────────────────────────────────────────────────────────────────
+services:
+  db:
+    image: postgres:15
+    env_file:
+    - .env
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL",
+              "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: main.py
+──────────────────────────────────────────────────────────────────────
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from sqlmodel import SQLModel
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.database import engine
+
+from app.modules.categoria.router import router as categoria_router
+from app.modules.producto.router import router as producto_router
+from app.modules.ingrediente.router import router as ingrediente_router
+
+from app.utils.errores import manejar_http_exceptions, manejar_validaciones
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    SQLModel.metadata.create_all(engine)
+    yield
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Tuki-FoodStore API",
+        description="Parcial Programación IV - Implementación Profesional de Relaciones Complejas",
+        version="1.0.0",
+        lifespan=lifespan
+    )
+
+    origenes_permitidos = [
+        "http://localhost:5173",  # Puerto por defecto de Vite (React)
+        "http://localhost:3000",  # Puerto por defecto de Create React App
+        "http://127.0.0.1:5173",
+    ]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origenes_permitidos, # URLs permitidas
+        allow_credentials=True,
+        allow_methods=["*"], # Permite todos los métodos HTTP
+        allow_headers=["*"], # Permite todos los headers
+    )
+
+    
+    app.include_router(categoria_router)
+    app.include_router(producto_router)
+    app.include_router(ingrediente_router)
+
+    app.add_exception_handler(HTTPException, manejar_http_exceptions)
+    app.add_exception_handler(RequestValidationError, manejar_validaciones)
+
+    return app
+
+app = create_app()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: requirements.txt
+──────────────────────────────────────────────────────────────────────
+fastapi[standard]
+sqlmodel
+psycopg[binary]==3.3.3
+python-dotenv==1.2.2
+alembic
+pydantic-settings
+pytest
+httpx
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: reset.py
+──────────────────────────────────────────────────────────────────────
+from sqlalchemy import text
+from app.core.database import engine
+
+def nuke_database():
+    with engine.connect() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS producto_ingrediente CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS producto_categoria CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS productos CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS ingredientes CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS categorias CASCADE;"))
+        conn.commit()
+    print("💥 Base de datos reseteada.")
+
+if __name__ == "__main__":
+    nuke_database()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: seed.py
+──────────────────────────────────────────────────────────────────────
+"""
+Script de seed para desarrollo.
+Ejecutar: python seed.py
+Crea datos de prueba para demostrar el flujo completo.
+"""
+from decimal import Decimal
+from sqlmodel import Session, SQLModel
+from app.core.database import engine
+from app.modules.categoria.models import Categoria
+from app.modules.ingrediente.models import Ingrediente
+from app.modules.producto.models import Producto
+from app.modules.producto_categoria.models import ProductoCategoria
+from app.modules.producto_ingrediente.models import ProductoIngrediente
+
+def seed():
+    SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        # Categorías
+        hamburguesas = Categoria(nombre="Hamburguesas", descripcion="Hamburguesas artesanales")
+        bebidas      = Categoria(nombre="Bebidas", descripcion="Bebidas frías y calientes")
+        sin_tacc     = Categoria(nombre="Sin TACC", descripcion="Opciones libres de gluten", parent_id=None)
+        session.add_all([hamburguesas, bebidas, sin_tacc])
+        session.flush()
+
+        # Subcategoría (hija de hamburguesas)
+        veganas = Categoria(nombre="Veganas", descripcion="Hamburguesas veganas", parent_id=hamburguesas.id)
+        session.add(veganas)
+        session.flush()
+
+        # Ingredientes
+        pan        = Ingrediente(nombre="Pan brioche",      es_alergeno=True)
+        carne      = Ingrediente(nombre="Carne vacuna",     es_alergeno=False)
+        queso      = Ingrediente(nombre="Queso cheddar",    es_alergeno=True)
+        lechuga    = Ingrediente(nombre="Lechuga",          es_alergeno=False)
+        tomate     = Ingrediente(nombre="Tomate",           es_alergeno=False)
+        hamburguesa_vegana = Ingrediente(nombre="Medallón vegano", es_alergeno=False)
+        session.add_all([pan, carne, queso, lechuga, tomate, hamburguesa_vegana])
+        session.flush()
+
+        # Productos
+        clasica = Producto(
+            nombre="Hamburguesa Clásica",
+            descripcion="La clásica con cheddar y lechuga",
+            precio_base=Decimal("1500.00"),
+            imagenes_url=["https://via.placeholder.com/300"],
+            stock_cantidad=50,
+        )
+        vegana = Producto(
+            nombre="Hamburguesa Vegana",
+            descripcion="100% plant-based",
+            precio_base=Decimal("1800.00"),
+            imagenes_url=["https://via.placeholder.com/300"],
+            stock_cantidad=30,
+        )
+        coca = Producto(
+            nombre="Coca-Cola 500ml",
+            precio_base=Decimal("800.00"),
+            stock_cantidad=100,
+        )
+        session.add_all([clasica, vegana, coca])
+        session.flush()
+
+        # Links ProductoCategoria
+        session.add(ProductoCategoria(producto_id=clasica.id, categoria_id=hamburguesas.id, es_principal=True))
+        session.add(ProductoCategoria(producto_id=vegana.id,  categoria_id=hamburguesas.id, es_principal=True))
+        session.add(ProductoCategoria(producto_id=vegana.id,  categoria_id=veganas.id,      es_principal=False))
+        session.add(ProductoCategoria(producto_id=vegana.id,  categoria_id=sin_tacc.id,     es_principal=False))
+        session.add(ProductoCategoria(producto_id=coca.id,    categoria_id=bebidas.id,      es_principal=True))
+
+        # Links ProductoIngrediente
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=pan.id,    es_removible=False))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=carne.id,  es_removible=False))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=queso.id,  es_removible=True))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=lechuga.id,es_removible=True))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=tomate.id, es_removible=True))
+        session.add(ProductoIngrediente(producto_id=vegana.id,  ingrediente_id=hamburguesa_vegana.id, es_removible=False))
+        session.add(ProductoIngrediente(producto_id=vegana.id,  ingrediente_id=lechuga.id,es_removible=True))
+
+        session.commit()
+        print("🌱 Seed OK: 4 categorías, 6 ingredientes, 3 productos creados.")
+
+if __name__ == "__main__":
+    seed()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\config.py
+──────────────────────────────────────────────────────────────────────
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
+
+class Settings(BaseSettings):
+    DATABASE_URL: str = "postgresql+psycopg://postgres:lucas@localhost:5433/foodstore"
+
+    @model_validator(mode="after")
+    def fix_database_url(self):
+        if self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql://"):
+            self.DATABASE_URL = self.DATABASE_URL.replace("postgresql://","postgresql+psycopg://", 1)
+        return self
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
+settings = Settings()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\database.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import create_engine, Session
+from typing import Annotated
+from fastapi import Depends
+from app.core.config import settings
+
+engine = create_engine(
+    settings.DATABASE_URL,
+    echo=True
+)
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+SessionDep = Annotated[Session, Depends(get_session)]
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\repository.py
+──────────────────────────────────────────────────────────────────────
+from typing import Generic, TypeVar, Type, Sequence, Optional
+from sqlmodel import SQLModel, Session, select, func
+
+# Definimos "T" como una variable genérica que representará cualquier tabla (Hero, Team, etc.)
+T = TypeVar("T", bound=SQLModel)
+
+class BaseRepository(Generic[T]):
+    """
+    Plantilla genérica CRUD.
+    Encapsula el acceso a datos. ¡NO HACE COMMIT!
+    """
+    """
+    Repositorio genérico que implementa operaciones CRUD básicas
+    para cualquier modelo basado en SQLModel.
+
+    Principio: el repositorio solo habla con la DB.
+    No contiene lógica de negocio ni levanta HTTPException.
+
+    Este repositorio sirve como clase base para repositorios específicos,
+    donde se agregan queries más complejas o reglas de acceso particulares.
+
+    Tipado:
+    - Usa Generic[ModelT] para mantener tipado fuerte en cada repositorio concreto.
+    """
+
+    def __init__(self, session: Session, model: Type[T]):
+        """
+        Inicializa el repositorio con una sesión de base de datos y el modelo asociado.
+
+        Args:
+            session (Session): Sesión activa de SQLModel/SQLAlchemy.
+                               Es inyectada generalmente por el UnitOfWork.
+            model (Type[ModelT]): Clase del modelo que este repositorio gestiona.
+        """
+        self.session = session
+        self.model = model
+
+
+    def get_by_id(self, record_id: int) -> Optional[T]:
+        """
+        Obtiene una entidad por su ID primario.
+
+        Args:
+            record_id (int): Identificador único del registro.
+
+        Returns:
+            ModelT | None: Instancia del modelo si existe, o None si no se encuentra.
+
+        Nota:
+            No lanza excepciones. El manejo de "no encontrado" debe hacerse en la capa de servicio.
+        """
+        return self.session.get(self.model, record_id)
+
+
+    def get_all(self, offset: int = 0, limit: int = 20) -> Sequence[T]:
+        """
+        Obtiene una lista paginada de entidades.
+
+        Args:
+            offset (int): Cantidad de registros a omitir (paginación).
+            limit (int): Cantidad máxima de registros a devolver.
+
+        Returns:
+            Sequence[ModelT]: Lista de entidades recuperadas.
+
+        Nota:
+            No garantiza orden si no se especifica explícitamente en la query.
+        """
+        return self.session.exec(
+            select(self.model).offset(offset).limit(limit)
+        ).all()
+    
+    def count_model(self) -> int:
+        """
+        Cuenta el total de registros del modelo.
+        """
+        return self.session.exec(
+            select(func.count()).select_from(self.model)
+        ).one()
+
+
+    def add(self, instance: T) -> T:
+        """
+        Persiste una nueva entidad en la sesión actual.
+
+        Flujo:
+        - add(): marca la entidad para inserción
+        - flush(): ejecuta INSERT en la DB sin commit (genera ID)
+        - refresh(): sincroniza el estado del objeto con la DB
+
+        Args:
+            instance (ModelT): Instancia a persistir.
+
+        Returns:
+            ModelT: La misma instancia, con su ID ya generado.
+
+        Importante:
+            NO hace commit. Esto lo maneja el UnitOfWork.
+        """
+        self.session.add(instance)
+        self.session.flush()  # obtiene el ID sin hacer commit
+        self.session.refresh(instance)
+        return instance
+    
+    def update(self, data: T) -> T:
+        # En SQLModel, hacer un add() de un objeto que ya tiene ID lo actualiza
+        self.session.add(data)
+        return data
+    
+
+    def delete(self, instance: T) -> None:
+        """
+        Marca una entidad para eliminación en la base de datos.
+
+        Flujo:
+        - delete(): marca para borrado
+        - flush(): ejecuta DELETE sin commit
+
+        Args:
+            instance (ModelT): Instancia a eliminar.
+
+        Importante:
+            NO hace commit. El UnitOfWork decide cuándo persistir el cambio.
+        """
+        self.session.delete(instance)
+        self.session.flush()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\unit_of_work.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session
+from typing import TypeVar
+
+# Creamos un tipo genérico que representa a UnitOfWork o cualquier clase que herede de ella
+U = TypeVar("U", bound="UnitOfWork")
+
+class UnitOfWork:
+    """
+    Gestiona el ciclo de vida de la transacción de base de datos.
+
+    Uso en servicios:
+        with uow:
+            uow.heroes.add(hero)
+            uow.teams.add(team)
+        # commit automático si no hay excepción
+        # rollback automático si hay excepción
+
+    El UoW es la única capa que llama a commit() y rollback().
+    Los repositorios solo llaman a flush() para obtener IDs en memoria.
+    """
+
+    def __init__(self, session: Session) -> None:
+        """
+        Inicializa el UnitOfWork con una sesión activa de base de datos.
+
+        Args:
+            session (Session): Instancia de SQLModel/SQLAlchemy Session.
+                               Representa el contexto de conexión y transacción.
+        """
+        self._session = session
+
+    def __enter__(self: U) -> U:
+        """
+        Método invocado al entrar en el contexto `with`.
+
+        Returns:
+            UnitOfWork: Retorna la propia instancia para operar dentro del bloque.
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """
+        Método invocado al salir del contexto `with`.
+
+        Controla automáticamente la transacción:
+        - Si no hubo excepción → commit()
+        - Si hubo excepción → rollback()
+
+        Args:
+            exc_type: Tipo de excepción (None si no hubo error)
+            exc_val: Valor de la excepción
+            exc_tb: Traceback de la excepción
+        """
+        if exc_type is None:
+            self._session.commit()
+        else:
+            self._session.rollback()
+
+    def commit(self) -> None:
+        """
+        Ejecuta un commit explícito de la transacción actual.
+        """
+        self._session.commit()
+
+    def rollback(self) -> None:
+        """
+        Ejecuta un rollback explícito de la transacción actual.
+        """
+        self._session.rollback()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\categoria\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\categoria\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List, TYPE_CHECKING
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field, Relationship
+
+if TYPE_CHECKING:
+    from app.modules.producto_categoria.models import ProductoCategoria
+
+class Categoria(SQLModel, table=True):
+    __tablename__ = "categorias"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Auto-referencia para subcategorías (0..1 a parent)
+    parent_id: Optional[int] = Field(default=None, foreign_key="categorias.id")
+    
+    nombre: str = Field(max_length=100, unique=True, index=True)
+    descripcion: Optional[str] = None
+    imagen_url: Optional[str] = None
+
+    # Audit
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    deleted_at: Optional[datetime] = None
+
+    # Relaciones auto-referenciales
+    # Con esto creo una lista de adyacencia ajjajaajja
+    parent: Optional["Categoria"] = Relationship(
+        back_populates="hijos",
+        sa_relationship_kwargs={"remote_side": "Categoria.id"}
+    )
+    hijos: List["Categoria"] = Relationship(back_populates="parent")
+
+    # Relación a la tabla intermedia
+    productos_links: List["ProductoCategoria"] = Relationship(back_populates="categoria")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\categoria\repository.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session, select, func
+from sqlalchemy.orm import selectinload
+from app.core.repository import BaseRepository
+from app.modules.categoria.models import Categoria
+from app.modules.producto_categoria.models import ProductoCategoria
+from typing import Optional
+
+class CategoriaRepository(BaseRepository[Categoria]):
+    def __init__(self, session: Session) -> None:
+        super().__init__(session, Categoria)
+
+    def get_by_id(self, record_id: int) -> Optional[Categoria]:
+        statement = (
+            select(Categoria)
+            .where(Categoria.id == record_id)
+            .options(
+                selectinload(Categoria.parent),
+                selectinload(Categoria.hijos),
+                selectinload(Categoria.productos_links)
+                .selectinload(ProductoCategoria.producto)
+                )
+        )
+        return self.session.exec(statement).first()
+
+    def get_by_nombre(self, nombre: str) -> Optional[Categoria]:
+        return self.session.exec(
+            select(Categoria).where(Categoria.nombre == nombre)
+        ).first()
+
+    def get_active(self, offset: int = 0, limit: int = 20) -> list[Categoria]:
+        return list(
+            self.session.exec(
+                select(Categoria)
+                .where(Categoria.deleted_at.is_(None))
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        )
+
+    def count_active(self) -> int:
+        return self.session.exec(
+            select(func.count()).select_from(Categoria).where(Categoria.deleted_at.is_(None))
+        ).one()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\categoria\router.py
+──────────────────────────────────────────────────────────────────────
+from typing import Annotated
+from fastapi import APIRouter, Depends, Query, status
+from app.core.database import SessionDep
+from app.modules.categoria.schemas import CategoriaRead, CategoriaCreate, CategoriaUpdate, CategoriaList, CategoriaWithChildren
+from app.modules.categoria.service import CategoriaService
+from app.modules.categoria.unit_of_work import CategoriaUnitOfWork
+
+router = APIRouter(prefix="/categorias", tags=["Categorías"])
+
+def get_categoria_service(session: SessionDep):
+    uow = CategoriaUnitOfWork(session)
+    return CategoriaService(uow)
+
+CategoriaServiceDep = Annotated[CategoriaService, Depends(get_categoria_service)]
+
+@router.get("/", response_model=CategoriaList)
+def list_categorias(
+    service: CategoriaServiceDep,
+    offset: Annotated[int, Query(ge=0, description="Registros a omitir")] = 0,
+    limit: Annotated[int, Query(ge=1, le=100, description="Máximo de registros")] = 20
+):
+    return service.get_all(offset=offset, limit=limit)
+
+@router.get("/{id}", response_model=CategoriaWithChildren)
+def get_categoria(id: int, service: CategoriaServiceDep):
+    return service.get_by_id(id)
+
+@router.post("/", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED)
+def create_categoria(categoria_in: CategoriaCreate, service: CategoriaServiceDep):
+    return service.create(categoria_in)
+
+@router.put("/{id}", response_model=CategoriaRead)
+def update_categoria(id: int, categoria_in: CategoriaUpdate, service: CategoriaServiceDep):
+    return service.update(id, categoria_in)
+
+@router.delete("/{id}", status_code=status.HTTP_200_OK)
+def delete_categoria(id: int, service: CategoriaServiceDep):
+    return service.delete(id)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\categoria\schemas.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List
+from sqlmodel import SQLModel, Field
+from datetime import datetime
+from pydantic import BaseModel
+
+# --- Esquemas auxiliares para las relaciones ---
+class ProductoMin(BaseModel):
+    id: int
+    nombre: str
+    precio_base: float
+
+class CategoriaProductoLink(BaseModel):
+    producto_id: int
+    es_principal: bool
+    producto: Optional[ProductoMin] = None
+
+# --- Base y Entrada ---
+class CategoriaBase(SQLModel):
+    nombre: str = Field(min_length=2, max_length=100)
+    descripcion: Optional[str] = None
+    imagen_url: Optional[str] = None
+    parent_id: Optional[int] = None
+
+class CategoriaCreate(CategoriaBase):
+    pass
+
+class CategoriaUpdate(SQLModel):
+    nombre: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    descripcion: Optional[str] = None
+    imagen_url: Optional[str] = None
+    parent_id: Optional[int] = None
+
+# --- Salida ---
+class CategoriaRead(CategoriaBase):
+    id: int
+    deleted_at : Optional[datetime]
+
+class CategoriaList(SQLModel):
+    """Respuesta paginada según el estándar de la unidad 4-actividad 1-endpoinds optimizados"""
+    data: List[CategoriaRead]
+    total: int
+
+class CategoriaWithChildren(CategoriaRead):
+    """Para mostrar el árbol en el Frontend"""
+    parent: Optional["CategoriaRead"] = None
+    hijos: List["CategoriaRead"] = []
+    productos_links: List[CategoriaProductoLink] = []
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\categoria\service.py
+──────────────────────────────────────────────────────────────────────
+from datetime import datetime, timezone
+from fastapi import HTTPException, status
+from app.modules.categoria.models import Categoria
+from app.modules.categoria.schemas import CategoriaCreate, CategoriaUpdate
+from app.modules.categoria.unit_of_work import CategoriaUnitOfWork
+
+class CategoriaService:
+    def __init__(self, uow: CategoriaUnitOfWork):
+        self.uow = uow
+
+    def get_all(self, offset: int = 0, limit: int = 20):
+        """
+        Devuelve la estructura exacta que pide el Schema de paginación (data y total).
+        """
+        with self.uow as uow:
+            categorias = uow.categorias.get_active(offset=offset, limit=limit)
+            total = uow.categorias.count_active()
+            return {"data": categorias, "total": total}
+
+    def get_by_id(self, categoria_id: int):
+        with self.uow as uow:
+            categoria = uow.categorias.get_by_id(categoria_id)
+            # Validamos que exista y que no esté borrada lógicamente
+            if not categoria or categoria.deleted_at is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Categoría con id {categoria_id} no encontrada."
+                )
+        return categoria
+
+    def create(self, categoria_in: CategoriaCreate):
+        with self.uow as uow:
+            # 1. Validar que no exista una categoría con el mismo nombre (Activa)
+            existe = uow.categorias.get_by_nombre(categoria_in.nombre)
+            if existe and existe.deleted_at is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Ya existe una categoría activa con el nombre '{categoria_in.nombre}'."
+                )
+            
+            # 2. Si nos mandan un parent_id, hay que validar que esa categoría "padre" exista
+            if categoria_in.parent_id:
+                parent = uow.categorias.get_by_id(categoria_in.parent_id)
+                if not parent or parent.deleted_at is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"La categoría padre con id {categoria_in.parent_id} no existe."
+                    )
+
+            # 3. Mapear schema a modelo y guardar
+            nueva_categoria = Categoria(**categoria_in.model_dump())
+            uow.categorias.add(nueva_categoria)
+            # El UnitOfWork hace el commit automáticamente al salir del bloque "with"
+        return nueva_categoria
+
+    def update(self, categoria_id: int, categoria_in: CategoriaUpdate):
+        with self.uow as uow:
+            # 1. Traer la original (reutilizamos el método get_by_id que ya lanza el 404)
+            categoria_db = self.get_by_id(categoria_id)
+
+            # 2. Si cambia el nombre, validar que el nuevo no choque con otro existente
+            if categoria_in.nombre and categoria_in.nombre != categoria_db.nombre:
+                existe = uow.categorias.get_by_nombre(categoria_in.nombre)
+                if existe and existe.deleted_at is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="El nombre ya está en uso por otra categoría."
+                    )
+
+            # 3. Si cambia el padre, validar que exista y que no se asigne a sí misma
+            if categoria_in.parent_id is not None and categoria_in.parent_id != categoria_db.parent_id:
+                if categoria_in.parent_id == categoria_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Una categoría no puede ser padre de sí misma."
+                    )
+                parent = uow.categorias.get_by_id(categoria_in.parent_id)
+                if not parent or parent.deleted_at is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="La nueva categoría padre no existe."
+                    )
+
+            # 4. Aplicar cambios solo de los campos que se enviaron
+            update_data = categoria_in.model_dump(exclude_unset=True)
+            for key, value in update_data.items():
+                setattr(categoria_db, key, value)
+            
+            categoria_db.updated_at = datetime.now(timezone.utc)
+            uow.categorias.update(categoria_db)
+        return categoria_db
+
+    def delete(self, categoria_id: int):
+        with self.uow as uow:
+            categoria_db = self.get_by_id(categoria_id)
+            
+            # Aplicamos el BORRADO LÓGICO
+            categoria_db.deleted_at = datetime.now(timezone.utc)
+            uow.categorias.update(categoria_db)
+            
+        return {"mensaje": f"Categoría {categoria_id} eliminada correctamente"}
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\categoria\unit_of_work.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session
+from app.core.unit_of_work import UnitOfWork
+from app.modules.categoria.repository import CategoriaRepository
+
+class CategoriaUnitOfWork(UnitOfWork):
+    def __init__(self, session: Session):
+        super().__init__(session)
+        self.categorias = CategoriaRepository(session)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\ingrediente\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\ingrediente\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List, TYPE_CHECKING
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field, Relationship
+
+if TYPE_CHECKING:
+    from app.modules.producto_ingrediente.models import ProductoIngrediente
+
+class Ingrediente(SQLModel, table=True):
+    __tablename__ = "ingredientes"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nombre: str = Field(max_length=100, unique=True, index=True)
+    descripcion: Optional[str] = None
+    es_alergeno: bool = Field(default=False)
+
+    # Audit
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    deleted_at: Optional[datetime] = None
+    
+    # Relación a la tabla intermedia
+    productos_links: List["ProductoIngrediente"] = Relationship(back_populates="ingrediente")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\ingrediente\repository.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session, select, func
+from sqlalchemy.orm import selectinload
+from app.core.repository import BaseRepository
+from app.modules.ingrediente.models import Ingrediente
+from app.modules.producto_ingrediente.models import ProductoIngrediente
+from typing import Optional
+
+class IngredienteRepository(BaseRepository[Ingrediente]):
+    def __init__(self, session: Session) -> None:
+        super().__init__(session, Ingrediente)
+
+    def get_by_id(self, record_id: int) -> Optional[Ingrediente]:
+        statement = (
+            select(Ingrediente)
+            .where(Ingrediente.id == record_id)
+            .options(
+                selectinload(Ingrediente.productos_links)
+                .selectinload(ProductoIngrediente.producto)
+                )
+        )
+        return self.session.exec(statement).first()
+
+    def get_by_nombre(self, nombre: str) -> Optional[Ingrediente]:
+        return self.session.exec(
+            select(Ingrediente).where(Ingrediente.nombre == nombre)
+        ).first()
+
+    def get_active(self, offset: int = 0, limit: int = 20) -> list[Ingrediente]:
+        return list(
+            self.session.exec(
+                select(Ingrediente)
+                .where(Ingrediente.deleted_at.is_(None))
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        )
+
+    def count_active(self) -> int:
+        return self.session.exec(
+            select(func.count())
+            .select_from(Ingrediente)
+            .where(Ingrediente.deleted_at.is_(None))
+        ).one()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\ingrediente\router.py
+──────────────────────────────────────────────────────────────────────
+from typing import Annotated
+from fastapi import APIRouter, Depends, Query, status
+from app.core.database import SessionDep
+from app.modules.ingrediente.schemas import IngredienteRead, IngredienteCreate, IngredienteUpdate, IngredienteList, IngredienteFullRead
+from app.modules.ingrediente.service import IngredienteService
+from app.modules.ingrediente.unit_of_work import IngredienteUnitOfWork
+
+router = APIRouter(prefix="/ingredientes", tags=["Ingredientes"])
+
+def get_ingrediente_service(session: SessionDep):
+    uow = IngredienteUnitOfWork(session)
+    return IngredienteService(uow)
+
+IngredienteServiceDep = Annotated[IngredienteService, Depends(get_ingrediente_service)]
+
+@router.get("/", response_model=IngredienteList)
+def list_ingredientes(
+    service: IngredienteServiceDep,
+    offset: Annotated[int, Query(ge=0, description="Registros a omitir")] = 0,
+    limit: Annotated[int, Query(ge=1, le=100, description="Máximo de registros")] = 20
+):
+    return service.get_all(offset=offset, limit=limit)
+
+@router.get("/{id}", response_model=IngredienteFullRead)
+def get_ingrediente(id: int, service: IngredienteServiceDep):
+    return service.get_by_id(id)
+
+@router.post("/", response_model=IngredienteRead, status_code=status.HTTP_201_CREATED)
+def create_ingrediente(ingrediente_in: IngredienteCreate, service: IngredienteServiceDep):
+    return service.create(ingrediente_in)
+
+@router.put("/{id}", response_model=IngredienteRead)
+def update_ingrediente(id: int, ingrediente_in: IngredienteUpdate, service: IngredienteServiceDep):
+    return service.update(id, ingrediente_in)
+
+@router.delete("/{id}", status_code=status.HTTP_200_OK)
+def delete_ingrediente(id: int, service: IngredienteServiceDep):
+    return service.delete(id)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\ingrediente\schemas.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List
+from sqlmodel import SQLModel, Field
+from pydantic import BaseModel
+
+# --- Esquemas auxiliares para las relaciones ---
+class ProductoMin(BaseModel):
+    id: int
+    nombre: str
+
+class IngredienteProductoLink(BaseModel):
+    producto_id: int
+    es_removible: bool
+    producto: Optional[ProductoMin] = None
+
+
+# --- Base y Entrada ---
+class IngredienteBase(SQLModel):
+    nombre: str = Field(min_length=2, max_length=100)
+    descripcion: Optional[str] = None
+    es_alergeno: bool = False
+
+class IngredienteCreate(IngredienteBase):
+    pass
+
+class IngredienteUpdate(SQLModel):
+    nombre: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    descripcion: Optional[str] = None
+    es_alergeno: Optional[bool] = None
+
+
+class IngredienteRead(IngredienteBase):
+    id: int
+
+class IngredienteList(SQLModel):
+    data: List[IngredienteRead]
+    total: int
+
+class IngredienteFullRead(IngredienteRead):
+    productos_links: List[IngredienteProductoLink] = []
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\ingrediente\service.py
+──────────────────────────────────────────────────────────────────────
+from datetime import datetime, timezone
+from fastapi import HTTPException, status
+from app.modules.ingrediente.models import Ingrediente
+from app.modules.ingrediente.schemas import IngredienteCreate, IngredienteUpdate
+from app.modules.ingrediente.unit_of_work import IngredienteUnitOfWork
+
+class IngredienteService:
+    def __init__(self, uow: IngredienteUnitOfWork):
+        self.uow = uow
+
+    def get_all(self, offset: int = 0, limit: int = 20):
+        with self.uow as uow:
+            ingredientes = uow.ingredientes.get_active(offset=offset, limit=limit)
+            total = uow.ingredientes.count_active()
+        return {"data": ingredientes, "total": total}
+
+    def get_by_id(self, ingrediente_id: int):
+        with self.uow as uow:
+            ingrediente = uow.ingredientes.get_by_id(ingrediente_id)
+            if not ingrediente or ingrediente.deleted_at is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, 
+                    detail="Ingrediente no encontrado"
+                )
+        return ingrediente
+
+    def create(self, ingrediente_in: IngredienteCreate):
+        with self.uow as uow:
+            if uow.ingredientes.get_by_nombre(ingrediente_in.nombre):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, 
+                    detail="El ingrediente ya existe"
+                )
+            
+            nuevo_ingrediente = Ingrediente(**ingrediente_in.model_dump())
+            uow.ingredientes.add(nuevo_ingrediente)
+        return nuevo_ingrediente
+
+    def update(self, ingrediente_id: int, ingrediente_in: IngredienteUpdate):
+        with self.uow as uow:
+            ingrediente_db = self.get_by_id(ingrediente_id)
+            
+            update_data = ingrediente_in.model_dump(exclude_unset=True)
+            for key, value in update_data.items():
+                setattr(ingrediente_db, key, value)
+            
+            ingrediente_db.updated_at = datetime.now(timezone.utc)
+            uow.ingredientes.update(ingrediente_db)
+        return ingrediente_db
+
+    def delete(self, ingrediente_id: int):
+        with self.uow as uow:
+            ingrediente_db = self.get_by_id(ingrediente_id)
+            
+            # 
+            ingrediente_db.deleted_at = datetime.now(timezone.utc)
+            uow.ingredientes.update(ingrediente_db)
+        return {"mensaje": f"Ingrediente {ingrediente_id} eliminado correctamente"}
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\ingrediente\unit_of_work.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session
+from app.core.unit_of_work import UnitOfWork
+from app.modules.ingrediente.repository import IngredienteRepository
+
+class IngredienteUnitOfWork(UnitOfWork):
+    def __init__(self, session: Session):
+        super().__init__(session)
+        self.ingredientes = IngredienteRepository(session)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List, TYPE_CHECKING
+from datetime import datetime, timezone
+from decimal import Decimal
+from sqlmodel import SQLModel, Field, Relationship, Column, ARRAY, Text, Numeric
+
+if TYPE_CHECKING:
+    from app.modules.producto_categoria.models import ProductoCategoria
+    from app.modules.producto_ingrediente.models import ProductoIngrediente
+
+class Producto(SQLModel, table=True):
+    __tablename__ = "productos"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nombre: str = Field(max_length=150, index=True)
+    descripcion: Optional[str] = None
+    
+    # Manejo de array y decimal con SQLAlchemy puro dentro de SQLModel
+    precio_base: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    imagenes_url: List[str] = Field(sa_column=Column(ARRAY(Text)), default=[])
+    
+    stock_cantidad: int = Field(default=0, ge=0)
+    disponible: bool = Field(default=True)
+
+    # Audit
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    deleted_at: Optional[datetime] = None
+
+    # Relaciones a las tablas intermedias
+    categorias_links: List["ProductoCategoria"] = Relationship(back_populates="producto")
+    ingredientes_links: List["ProductoIngrediente"] = Relationship(back_populates="producto")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto\repository.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session, select, func
+from sqlalchemy.orm import selectinload
+from app.core.repository import BaseRepository
+from app.modules.producto.models import Producto
+from app.modules.producto_categoria.models import ProductoCategoria
+from app.modules.producto_ingrediente.models import ProductoIngrediente
+from typing import Optional
+
+class ProductoRepository(BaseRepository[Producto]):
+    def __init__(self, session: Session) -> None:
+        super().__init__(session, Producto)
+
+    def get_by_id(self, record_id: int) -> Optional[Producto]:
+        statement = (
+            select(Producto)
+            .where(Producto.id == record_id)
+            .options(
+                selectinload(Producto.categorias_links).selectinload(ProductoCategoria.categoria),
+                selectinload(Producto.ingredientes_links).selectinload(ProductoIngrediente.ingrediente)
+            )
+        )
+        return self.session.exec(statement).first()
+
+    def get_by_nombre(self, nombre: str) -> Optional[Producto]:
+        return self.session.exec(
+            select(Producto).where(Producto.nombre == nombre)
+        ).first()
+
+    def get_active(self, offset: int = 0, limit: int = 20,categoria_id: Optional[list[int]] = None,ingrediente_id: Optional[list[int]] = None) -> list[Producto]:
+        query = select(Producto).where(Producto.deleted_at.is_(None))
+        if categoria_id:
+            query = query.join(ProductoCategoria).where(ProductoCategoria.categoria_id.in_(categoria_id))
+        if ingrediente_id:
+            query = query.join(ProductoIngrediente).where(ProductoIngrediente.ingrediente_id.in_(ingrediente_id))
+        return list(self.session.exec(query.offset(offset).limit(limit)).all())
+
+
+    def count_active(self,categoria_id: Optional[list[int]] = None,ingrediente_id: Optional[list[int]] = None) -> int:
+        query = select(func.count()).select_from(Producto).where(Producto.deleted_at.is_(None))
+        if categoria_id:
+            query = query.join(ProductoCategoria).where(ProductoCategoria.categoria_id.in_(categoria_id))
+        if ingrediente_id:
+            query = query.join(ProductoIngrediente).where(ProductoIngrediente.ingrediente_id.in_(ingrediente_id))
+        return self.session.exec(query).one()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto\router.py
+──────────────────────────────────────────────────────────────────────
+from typing import Annotated, Optional, List
+from fastapi import APIRouter, Depends, Query, status
+from app.core.database import SessionDep
+from app.modules.producto.schemas import ProductoRead, ProductoCreate, ProductoUpdate, ProductoList, ProductoFullRead
+from app.modules.producto.service import ProductoService
+from app.modules.producto.unit_of_work import ProductoUnitOfWork
+
+router = APIRouter(prefix="/productos", tags=["Productos"])
+
+def get_producto_service(session: SessionDep):
+    uow = ProductoUnitOfWork(session)
+    return ProductoService(uow)
+
+ProductoServiceDep = Annotated[ProductoService, Depends(get_producto_service)]
+
+@router.get("/", response_model=ProductoList)
+def list_productos(
+    service: ProductoServiceDep,
+    offset: Annotated[int, Query(ge=0, description="Registros a omitir")] = 0,
+    limit: Annotated[int, Query(ge=1, le=100, description="Máximo de registros")] = 20,
+    categoria_id: Annotated[Optional[List[int]], Query(description="Filtrar por IDs de Categoría")] = None,
+    ingrediente_id: Annotated[Optional[List[int]], Query(description="Filtrar por IDs de Ingrediente")] = None
+):
+    return service.get_all(
+        offset=offset, 
+        limit=limit, 
+        categoria_id=categoria_id, 
+        ingrediente_id=ingrediente_id
+    )
+
+@router.get("/{id}", response_model=ProductoFullRead)
+def get_producto(id: int, service: ProductoServiceDep):
+    return service.get_by_id(id)
+
+@router.post("/", response_model=ProductoRead, status_code=status.HTTP_201_CREATED)
+def create_producto(producto_in: ProductoCreate, service: ProductoServiceDep):
+    return service.create(producto_in)
+
+@router.put("/{id}", response_model=ProductoRead)
+def update_producto(id: int, producto_in: ProductoUpdate, service: ProductoServiceDep):
+    return service.update(id, producto_in)
+
+@router.delete("/{id}", status_code=status.HTTP_200_OK)
+def delete_producto(id: int, service: ProductoServiceDep):
+    return service.delete(id)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto\schemas.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List
+from decimal import Decimal
+from sqlmodel import SQLModel, Field
+from pydantic import BaseModel
+
+from app.modules.categoria.schemas import CategoriaRead
+from app.modules.ingrediente.schemas import IngredienteRead
+
+# --- Esquemas para los "Links" (Tablas intermedias) ---
+class ProductoIngredienteRead(BaseModel):
+    ingrediente_id: int
+    es_removible: bool
+    # Agregamos la relación para ver el nombre y descripción del ingrediente
+    ingrediente: Optional[IngredienteRead] = None 
+
+    class Config:
+        from_attributes = True
+
+class ProductoCategoriaRead(BaseModel):
+    categoria_id: int
+    es_principal: bool
+    # Agregamos la relación para ver el nombre de la categoría
+    categoria: Optional[CategoriaRead] = None
+
+    class Config:
+        from_attributes = True
+
+# --- Producto principal ---
+class ProductoBase(SQLModel):
+    nombre: str = Field(min_length=2, max_length=150)
+    descripcion: Optional[str] = None
+    precio_base: Decimal
+    imagenes_url: List[str] = []
+    stock_cantidad: int = 0
+    disponible: bool = True
+
+class ProductoCreate(ProductoBase):
+    categoria_ids: List[int] = []
+    ingrediente_ids: List[int] = []
+
+class ProductoUpdate(SQLModel):
+    nombre: Optional[str] = Field(default=None, min_length=2, max_length=150)
+    precio_base: Optional[Decimal] = Field(default=None, ge=0)
+    stock_cantidad: Optional[int] = Field(default=None, ge=0)
+    disponible: Optional[bool] = None
+
+class ProductoRead(ProductoBase):
+    id: int
+
+class ProductoList(SQLModel):
+    data: List[ProductoRead]
+    total: int
+
+class ProductoFullRead(ProductoRead):
+    """
+    Respuesta completa con relaciones para el detalle del producto.    """
+    categorias_links: List[ProductoCategoriaRead] = []
+    ingredientes_links: List[ProductoIngredienteRead] = []
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto\service.py
+──────────────────────────────────────────────────────────────────────
+from datetime import datetime, timezone
+from fastapi import HTTPException
+from app.modules.producto.models import Producto
+from app.modules.producto_categoria.models import ProductoCategoria
+from app.modules.producto_ingrediente.models import ProductoIngrediente
+from app.modules.producto.schemas import ProductoCreate, ProductoUpdate
+from app.modules.producto.unit_of_work import ProductoUnitOfWork
+from typing import Optional, List
+
+class ProductoService:
+    def __init__(self, uow: ProductoUnitOfWork):
+        self.uow = uow
+
+    def get_all(self, offset: int = 0, limit: int = 20,categoria_id: Optional[List[int]] = None,ingrediente_id: Optional[List[int]] = None):
+        with self.uow as uow:
+            productos = uow.productos.get_active(offset=offset, limit=limit, categoria_id=categoria_id, ingrediente_id=ingrediente_id)
+            total = uow.productos.count_active(
+                categoria_id=categoria_id, 
+                ingrediente_id=ingrediente_id
+            )
+        return {"data": productos, "total": total}
+        
+    def get_by_id(self, producto_id: int):
+        with self.uow as uow:
+            producto = uow.productos.get_by_id(producto_id)
+            if not producto or producto.deleted_at is not None:
+                raise HTTPException(
+                    status_code=404, detail="Producto no encontrado"
+                )
+
+        return producto
+
+    def create(self, producto_in: ProductoCreate):
+        with self.uow as uow:
+            # 1. Validar nombre duplicado
+            if uow.productos.get_by_nombre(producto_in.nombre):
+                raise HTTPException(status_code=409, detail="El producto ya existe")
+
+            # 2. Crear instancia base (sin las listas de IDs)
+            producto_data = producto_in.model_dump(exclude={"categoria_ids", "ingrediente_ids"})
+            nuevo_producto = Producto(**producto_data)
+            uow.productos.add(nuevo_producto) 
+
+            # 3. Relaciones Complejas: Categorías
+            for idx, cat_id in enumerate(producto_in.categoria_ids):
+                categoria = uow.categorias.get_by_id(cat_id)
+                if not categoria:
+                    raise HTTPException(status_code=400, detail=f"Categoría {cat_id} no existe")
+                
+                # Definimos la primer categoria como principal por defecto
+                es_principal = True if idx == 0 else False
+                link_cat = ProductoCategoria(producto_id=nuevo_producto.id, categoria_id=cat_id, es_principal=es_principal)
+                uow._session.add(link_cat)
+
+            # 4. Relaciones Complejas: Ingredientes
+            for ing_id in producto_in.ingrediente_ids:
+                ingrediente = uow.ingredientes.get_by_id(ing_id)
+                if not ingrediente:
+                    raise HTTPException(status_code=400, detail=f"Ingrediente {ing_id} no existe")
+                
+                link_ing = ProductoIngrediente(producto_id=nuevo_producto.id, ingrediente_id=ing_id)
+                uow._session.add(link_ing)
+
+        return nuevo_producto
+        
+    def update(self, producto_id: int, producto_in: ProductoUpdate):
+        with self.uow as uow:
+            producto_db = uow.productos.get_by_id(producto_id)
+            if not producto_db or producto_db.deleted_at is not None:
+                raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+            update_data = producto_in.model_dump(exclude_unset=True)
+            for key, value in update_data.items():
+                setattr(producto_db, key, value)
+            
+            producto_db.updated_at = datetime.now(timezone.utc)
+            uow.productos.update(producto_db)
+        return producto_db
+
+    def delete(self, producto_id: int):
+        with self.uow as uow:
+            producto = uow.productos.get_by_id(producto_id)
+            if not producto:
+                raise HTTPException(status_code=404, detail="Producto no encontrado")
+            
+            producto.deleted_at = datetime.now(timezone.utc)
+            uow.productos.update(producto)
+        return {"mensaje": "Producto eliminado (lógico)"}
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto\unit_of_work.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session
+from app.core.unit_of_work import UnitOfWork
+from app.modules.producto.repository import ProductoRepository
+from app.modules.categoria.repository import CategoriaRepository
+from app.modules.ingrediente.repository import IngredienteRepository
+
+class ProductoUnitOfWork(UnitOfWork):
+    def __init__(self, session: Session):
+        super().__init__(session)
+        self.productos = ProductoRepository(session)
+        self.categorias = CategoriaRepository(session)
+        self.ingredientes = IngredienteRepository(session)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto_categoria\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto_categoria\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import TYPE_CHECKING
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import PrimaryKeyConstraint, Column, ForeignKey, Integer
+
+if TYPE_CHECKING:
+    from app.modules.producto.models import Producto
+    from app.modules.categoria.models import Categoria
+
+class ProductoCategoria(SQLModel, table=True):
+    __tablename__ = "producto_categoria"
+
+    # Clave primaria compuesta
+    __table_args__ = (PrimaryKeyConstraint("producto_id", "categoria_id"),)
+
+    producto_id: int = Field(sa_column=Column(Integer, ForeignKey("productos.id", ondelete="CASCADE"), nullable=False))
+    categoria_id: int = Field(sa_column=Column(Integer, ForeignKey("categorias.id", ondelete="CASCADE"), nullable=False))
+    
+    es_principal: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Relaciones directas 
+    producto: "Producto" = Relationship(back_populates="categorias_links")
+    categoria: "Categoria" = Relationship(back_populates="productos_links")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto_ingrediente\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\producto_ingrediente\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import TYPE_CHECKING
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import PrimaryKeyConstraint, Column, ForeignKey, Integer
+
+if TYPE_CHECKING:
+    from app.modules.producto.models import Producto
+    from app.modules.ingrediente.models import Ingrediente
+
+class ProductoIngrediente(SQLModel, table=True):
+    __tablename__ = "producto_ingrediente"
+
+    # Clave primaria compuesta
+    __table_args__ = (PrimaryKeyConstraint("producto_id", "ingrediente_id"),)
+
+    producto_id: int = Field(sa_column=Column(Integer, ForeignKey("productos.id", ondelete="CASCADE"), nullable=False))
+    ingrediente_id: int = Field(sa_column=Column(Integer, ForeignKey("ingredientes.id", ondelete="CASCADE"), nullable=False))
+    
+    es_removible: bool = Field(default=False)
+
+    # Relaciones directas
+    producto: "Producto" = Relationship(back_populates="ingredientes_links")
+    ingrediente: "Ingrediente" = Relationship(back_populates="productos_links")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\utils\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\utils\errores.py
+──────────────────────────────────────────────────────────────────────
+from fastapi import Request, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+async def manejar_validaciones(request: Request, exc: RequestValidationError):
+    detalles = exc.errors()
+    primer_error = detalles[0]
+
+    mensaje = f"Error de validación en el campo: {primer_error['loc'][-1]} - {primer_error['msg']}"
+    return JSONResponse(
+        status_code=422,
+        content={"mensaje": mensaje, "codigo": 422}
+    )
+
+async def manejar_http_exceptions(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"mensaje": exc.detail, "codigo": exc.status_code}
+    )
