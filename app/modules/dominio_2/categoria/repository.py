@@ -1,8 +1,8 @@
 from sqlmodel import Session, select, func
 from sqlalchemy.orm import selectinload
 from app.core.repository import BaseRepository
-from app.modules.categoria.models import Categoria
-from app.modules.producto_categoria.models import ProductoCategoria
+from app.modules.dominio_2.categoria.models import Categoria
+from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
 from typing import Optional
 
 class CategoriaRepository(BaseRepository[Categoria]):

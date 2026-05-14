@@ -4,8 +4,8 @@ from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import PrimaryKeyConstraint, Column, ForeignKey, Integer
 
 if TYPE_CHECKING:
-    from app.modules.producto.models import Producto
-    from app.modules.categoria.models import Categoria
+    from app.modules.dominio_2.producto.models import Producto
+    from app.modules.dominio_2.categoria.models import Categoria
 
 class ProductoCategoria(SQLModel, table=True):
     __tablename__ = "producto_categoria"

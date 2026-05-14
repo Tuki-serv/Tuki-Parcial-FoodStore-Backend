@@ -15,11 +15,11 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from sqlmodel import SQLModel
-from app.modules.categoria.models import Categoria
-from app.modules.producto.models import Producto
-from app.modules.ingrediente.models import Ingrediente
-from app.modules.producto_categoria.models import ProductoCategoria
-from app.modules.producto_ingrediente.models import ProductoIngrediente
+from app.modules.dominio_2.categoria.models import Categoria
+from app.modules.dominio_2.producto.models import Producto
+from app.modules.dominio_2.ingrediente.models import Ingrediente
+from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
 from app.core.database import engine
 
 target_metadata = SQLModel.metadata

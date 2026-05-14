@@ -4,8 +4,8 @@ from decimal import Decimal
 from sqlmodel import SQLModel, Field, Relationship, Column, ARRAY, Text, Numeric
 
 if TYPE_CHECKING:
-    from app.modules.producto_categoria.models import ProductoCategoria
-    from app.modules.producto_ingrediente.models import ProductoIngrediente
+    from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+    from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
 
 class Producto(SQLModel, table=True):
     __tablename__ = "productos"

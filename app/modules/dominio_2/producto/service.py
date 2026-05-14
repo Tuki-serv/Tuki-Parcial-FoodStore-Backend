@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 from fastapi import HTTPException
-from app.modules.producto.models import Producto
-from app.modules.producto_categoria.models import ProductoCategoria
-from app.modules.producto_ingrediente.models import ProductoIngrediente
-from app.modules.producto.schemas import ProductoCreate, ProductoUpdate
-from app.modules.producto.unit_of_work import ProductoUnitOfWork
+from app.modules.dominio_2.producto.models import Producto
+from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
+from app.modules.dominio_2.producto.schemas import ProductoCreate, ProductoUpdate
+from app.modules.dominio_2.producto.unit_of_work import ProductoUnitOfWork
 from typing import Optional, List
 
 class ProductoService:

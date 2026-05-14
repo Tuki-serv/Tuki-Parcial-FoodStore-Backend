@@ -1,9 +1,9 @@
 from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, Query, status
 from app.core.database import SessionDep
-from app.modules.producto.schemas import ProductoRead, ProductoCreate, ProductoUpdate, ProductoList, ProductoFullRead
-from app.modules.producto.service import ProductoService
-from app.modules.producto.unit_of_work import ProductoUnitOfWork
+from app.modules.dominio_2.producto.schemas import ProductoRead, ProductoCreate, ProductoUpdate, ProductoList, ProductoFullRead
+from app.modules.dominio_2.producto.service import ProductoService
+from app.modules.dominio_2.producto.unit_of_work import ProductoUnitOfWork
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 

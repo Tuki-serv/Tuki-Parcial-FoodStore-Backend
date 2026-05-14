@@ -3,8 +3,8 @@ from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import PrimaryKeyConstraint, Column, ForeignKey, Integer
 
 if TYPE_CHECKING:
-    from app.modules.producto.models import Producto
-    from app.modules.ingrediente.models import Ingrediente
+    from app.modules.dominio_2.producto.models import Producto
+    from app.modules.dominio_2.ingrediente.models import Ingrediente
 
 class ProductoIngrediente(SQLModel, table=True):
     __tablename__ = "producto_ingrediente"

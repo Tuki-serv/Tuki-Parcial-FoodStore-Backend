@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field, Relationship
 
 if TYPE_CHECKING:
-    from app.modules.producto_categoria.models import ProductoCategoria
+    from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
 
 class Categoria(SQLModel, table=True):
     __tablename__ = "categorias"

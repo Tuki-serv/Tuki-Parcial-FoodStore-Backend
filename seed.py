@@ -6,11 +6,11 @@ Crea datos de prueba para demostrar el flujo completo.
 from decimal import Decimal
 from sqlmodel import Session, SQLModel
 from app.core.database import engine
-from app.modules.categoria.models import Categoria
-from app.modules.ingrediente.models import Ingrediente
-from app.modules.producto.models import Producto
-from app.modules.producto_categoria.models import ProductoCategoria
-from app.modules.producto_ingrediente.models import ProductoIngrediente
+from app.modules.dominio_2.categoria.models import Categoria
+from app.modules.dominio_2.ingrediente.models import Ingrediente
+from app.modules.dominio_2.producto.models import Producto
+from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
 
 def seed():
     SQLModel.metadata.create_all(engine)

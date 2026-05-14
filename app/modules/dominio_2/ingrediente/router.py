@@ -1,9 +1,9 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from app.core.database import SessionDep
-from app.modules.ingrediente.schemas import IngredienteRead, IngredienteCreate, IngredienteUpdate, IngredienteList, IngredienteFullRead
-from app.modules.ingrediente.service import IngredienteService
-from app.modules.ingrediente.unit_of_work import IngredienteUnitOfWork
+from app.modules.dominio_2.ingrediente.schemas import IngredienteRead, IngredienteCreate, IngredienteUpdate, IngredienteList, IngredienteFullRead
+from app.modules.dominio_2.ingrediente.service import IngredienteService
+from app.modules.dominio_2.ingrediente.unit_of_work import IngredienteUnitOfWork
 
 router = APIRouter(prefix="/ingredientes", tags=["Ingredientes"])
 

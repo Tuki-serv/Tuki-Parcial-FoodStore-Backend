@@ -1,8 +1,8 @@
 from sqlmodel import Session, select, func
 from sqlalchemy.orm import selectinload
 from app.core.repository import BaseRepository
-from app.modules.ingrediente.models import Ingrediente
-from app.modules.producto_ingrediente.models import ProductoIngrediente
+from app.modules.dominio_2.ingrediente.models import Ingrediente
+from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
 from typing import Optional
 
 class IngredienteRepository(BaseRepository[Ingrediente]):

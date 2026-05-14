@@ -1,9 +1,9 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from app.core.database import SessionDep
-from app.modules.categoria.schemas import CategoriaRead, CategoriaCreate, CategoriaUpdate, CategoriaList, CategoriaWithChildren
-from app.modules.categoria.service import CategoriaService
-from app.modules.categoria.unit_of_work import CategoriaUnitOfWork
+from app.modules.dominio_2.categoria.schemas import CategoriaRead, CategoriaCreate, CategoriaUpdate, CategoriaList, CategoriaWithChildren
+from app.modules.dominio_2.categoria.service import CategoriaService
+from app.modules.dominio_2.categoria.unit_of_work import CategoriaUnitOfWork
 
 router = APIRouter(prefix="/categorias", tags=["Categorías"])
 

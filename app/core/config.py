@@ -4,6 +4,10 @@ from pydantic import model_validator
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg://postgres:lucas@localhost:5433/foodstore"
 
+    SECRET_KEY: str  # FastAPI te va a exigir que esto exista en tu archivo .env
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
     @model_validator(mode="after")
     def fix_database_url(self):
         if self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql://"):

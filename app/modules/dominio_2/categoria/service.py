@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
-from app.modules.categoria.models import Categoria
-from app.modules.categoria.schemas import CategoriaCreate, CategoriaUpdate
-from app.modules.categoria.unit_of_work import CategoriaUnitOfWork
+from app.modules.dominio_2.categoria.models import Categoria
+from app.modules.dominio_2.categoria.schemas import CategoriaCreate, CategoriaUpdate
+from app.modules.dominio_2.categoria.unit_of_work import CategoriaUnitOfWork
 
 class CategoriaService:
     def __init__(self, uow: CategoriaUnitOfWork):

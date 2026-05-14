@@ -3,8 +3,8 @@ from decimal import Decimal
 from sqlmodel import SQLModel, Field
 from pydantic import BaseModel
 
-from app.modules.categoria.schemas import CategoriaRead
-from app.modules.ingrediente.schemas import IngredienteRead
+from app.modules.dominio_2.categoria.schemas import CategoriaRead
+from app.modules.dominio_2.ingrediente.schemas import IngredienteRead
 
 # --- Esquemas para los "Links" (Tablas intermedias) ---
 class ProductoIngredienteRead(BaseModel):

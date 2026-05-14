@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import engine
 
-from app.modules.categoria.router import router as categoria_router
-from app.modules.producto.router import router as producto_router
-from app.modules.ingrediente.router import router as ingrediente_router
+from app.modules.dominio_2.categoria.router import router as categoria_router
+from app.modules.dominio_2.producto.router import router as producto_router
+from app.modules.dominio_2.ingrediente.router import router as ingrediente_router
+from app.modules.dominio_1.usuario.routers import router as usuario_router
 
 from app.utils.errores import manejar_http_exceptions, manejar_validaciones
 
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(categoria_router)
     app.include_router(producto_router)
     app.include_router(ingrediente_router)
+    app.include_router(usuario_router)
 
     app.add_exception_handler(HTTPException, manejar_http_exceptions)
     app.add_exception_handler(RequestValidationError, manejar_validaciones)
