@@ -69,8 +69,8 @@ class BaseRepository(Generic[T]):
         
         if hasattr(self.model, "created_at"):
             statement = statement.order_by(self.model.created_at.asc())
-        elif hasattr(self.model, "id"):
-            statement = statement.order_by(self.model.id.asc())
+        # elif hasattr(self.model, "id"):
+        #     statement = statement.order_by(self.model.id.asc())
         
         return self.session.exec(statement.offset(offset).limit(limit)).all()
         

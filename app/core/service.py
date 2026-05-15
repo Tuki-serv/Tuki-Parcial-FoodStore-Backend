@@ -2,26 +2,35 @@ from typing import Generic, TypeVar, Type, Any
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import SQLModel
+from app.core.unit_of_work import UnitOfWork
+from app.core.repository import BaseRepository
 from datetime import datetime, timezone
 
 ModelType = TypeVar("ModelType", bound=SQLModel)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
+UoWType = TypeVar("UowType", bound=UnitOfWork)
 
-class base_service(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
-    def __init__(self, uow: Any, repo_name: str, model_class: Type[ModelType]):
-        """
-        uow: La instancia de la unidad de trabajo (ej. CategoriaUnitOfWork)
-        repo_name: El nombre del atributo del repositorio en la UoW (ej. 'categorias')
-        model_class: La clase de la entidad para instanciarla en el create (ej. Categoria)
-        """
+
+class base_service(Generic[ModelType, CreateSchemaType, UpdateSchemaType, UoWType, RepositoryType]):
+    def __init__(self, uow: UoWType, repo_name: str, model_class: Type[ModelType],):
         self.uow = uow
-        self.repo_name = repo_name
+        self.repo = RepositoryType[ModelType]
         self.model_class = model_class
 
     @property
-    def _repo(self):
+    def _repo(self) -> BaseRepository[ModelType]:
         return getattr(self.uow, self.repo_name)
+
+# class base_service(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+#     def __init__(self, uow: Any, repo_name: str, model_class: Type[ModelType]):
+#         self.uow = uow
+#         self.repo_name = repo_name
+#         self.model_class = model_class
+
+#     @property
+#     def _repo(self):
+#         return getattr(self.uow, self.repo_name)
     
     def get_all(self, offset: int = 0, limit: int = 20):
         with self.uow as uow:
@@ -46,8 +55,8 @@ class base_service(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return nuevo_item
         
     def update(self, item_id: int | str, item_in: UpdateSchemaType) -> ModelType:
-        item_db = self.get_by_id(item_id)
         with self.uow as uow:
+            item_db = self.get_by_id(item_id)
 
             update_data = item_in.model_dump(exclude_unset=True)
             for key, value in update_data.items():
@@ -60,10 +69,11 @@ class base_service(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return item_db
         
     def delete(self, item_id: int | str):
-        item_db = self.get_by_id(item_id)
-        if hasattr(item_db, "deleted_at"):
-            item_db.deleted_at = datetime.now(timezone.utc)
-        
-        self.update(item_id, item_db)
+        with self.uow as uow:
+            item_db = self._get_or_404(item_id)
 
-        return {"message": f"{self.model_class.__name__} elminado/a correctamente"}
+            if hasattr(item_db, "deleted_at"):
+                item_db.deleted_at = datetime.now(timezone.utc)
+                self._repo.update(item_db)
+
+        return {"message": f"{self.model_class.__name__} eliminado/a correctamente"}
