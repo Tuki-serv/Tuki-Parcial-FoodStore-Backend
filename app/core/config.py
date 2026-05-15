@@ -2,9 +2,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+psycopg://postgres:lucas@localhost:5433/foodstore"
+    DATABASE_URL: str 
+    SECRET_KEY: str  
 
-    SECRET_KEY: str  # FastAPI te va a exigir que esto exista en tu archivo .env
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    SECRET_KEY: str 
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 

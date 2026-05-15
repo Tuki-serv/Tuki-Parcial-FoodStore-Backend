@@ -14,7 +14,7 @@ class UserCreate(BaseModel):
     apellido: str = Field(..., max_length=80)
     email: EmailStr
     celular: Optional[str] = Field(default=None, max_length=20)
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=8)# poner limite
     
 # --- Salida de datos (GET /me, Respuesta de Login/Register) ---
 class UserPublic(BaseModel):

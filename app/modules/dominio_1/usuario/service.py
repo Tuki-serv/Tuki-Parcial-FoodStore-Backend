@@ -1,4 +1,3 @@
-import secrets
 import hashlib
 from app.core.config import settings
 from datetime import datetime, timedelta, timezone
@@ -71,10 +70,6 @@ class UsuarioService:
 
 
     def login(self, form_data: OAuth2PasswordRequestForm) -> Token:
-        """
-        Devuelve un diccionario crudo que luego el Router formateará
-        para inyectar el Access y Refresh Token en las Cookies.
-        """
         email_ingresado = form_data.username 
         password_ingresada = form_data.password
 
@@ -91,16 +86,15 @@ class UsuarioService:
 
             # --- GENERACIÓN DE TOKENS ---
             
-            # 1. Access Token (Corto plazo)
+            # 1. Access Token
             roles_codigos = [rol.codigo for rol in user.roles]
             access_token = create_access_token(
-                data={"sub": user.email, "roles": roles_codigos}
+                data={"sub": user.id, "roles": roles_codigos}
             )
 
-            # 2. Refresh Token (Largo plazo y persistente)
-            raw_refresh_token = secrets.token_urlsafe(32)
-            token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
-            expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+            # 2. Refresh Token
+            token_hash = hashlib.sha256(access_token.encode()).hexdigest()
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
             nuevo_rt = RefreshToken(
                 usuario_id=user.id,
@@ -109,7 +103,6 @@ class UsuarioService:
             )
             
             uow.session.add(nuevo_rt) 
-            uow.commit()
 
             return Token(
                 access_token=access_token,
@@ -125,6 +118,7 @@ class UsuarioService:
         """Lista usuarios omitiendo los que tienen borrado lógico."""
         with self.uow as uow:
             return uow.usuarios.get_all_active()
+        
 
     def desactivar_usuario(self, usuario_id: int):
         """Aplica el borrado lógico (Baneo)."""
