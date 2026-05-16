@@ -644,3 +644,5 @@ class ProductoList(SQLModel):
     total: int = Field(..., description="Total de productos disponibles")
 ```
 # Dominio 3
+
+![[Pasted image 20260515140421.png]]

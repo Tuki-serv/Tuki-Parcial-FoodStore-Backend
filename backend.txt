@@ -1,0 +1,3540 @@
+======================================================================
+DIRECTORIO: C:\cosas\UTN\Cursos\4-cuarto semestre\programacion 4\Evaluaciones\Parcial 1\FoodStore-Backend
+ARCHIVOS INCLUIDOS: 59
+======================================================================
+
+── ESTRUCTURA ──
+
+C:\cosas\UTN\Cursos\4-cuarto semestre\programacion 4\Evaluaciones\Parcial 1\FoodStore-Backend
+├── .gitignore
+├── Model-Schemas.md
+├── README.md
+├── Variables de entorno.md
+├── alembic.ini
+├── diringest.py
+├── docker-compose.yml
+├── main.py
+├── requirements.txt
+├── reset.py
+├── seed.py
+📁 alembic
+    ├── README
+    ├── env.py
+    ├── script.py.mako
+    📁 versions
+        ├── 17a724942c90_initial_migration.py
+📁 app
+    ├── __init__.py
+    📁 core
+        ├── __init__.py
+        ├── config.py
+        ├── database.py
+        ├── deps.py
+        ├── enums.py
+        ├── repository.py
+        ├── security.py
+        ├── service.py
+        ├── unit_of_work.py
+    📁 modules
+        ├── __init__.py
+        📁 dominio_1
+            📁 usuario
+                ├── models.py
+                ├── repository.py
+                ├── routers.py
+                ├── schemas.py
+                ├── service.py
+                ├── unit_of_work.py
+        📁 dominio_2
+            📁 categoria
+                ├── __init__.py
+                ├── models.py
+                ├── repository.py
+                ├── router.py
+                ├── schemas.py
+                ├── service.py
+                ├── unit_of_work.py
+            📁 ingrediente
+                ├── __init__.py
+                ├── models.py
+                ├── repository.py
+                ├── router.py
+                ├── schemas.py
+                ├── service.py
+                ├── unit_of_work.py
+            📁 producto
+                ├── __init__.py
+                ├── models.py
+                ├── repository.py
+                ├── router.py
+                ├── schemas.py
+                ├── service.py
+                ├── unit_of_work.py
+            📁 producto_categoria
+                ├── __init__.py
+                ├── models.py
+            📁 producto_ingrediente
+                ├── __init__.py
+                ├── models.py
+    📁 utils
+        ├── __init__.py
+        ├── errores.py
+
+
+── CONTENIDO DE ARCHIVOS ──
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: .gitignore
+──────────────────────────────────────────────────────────────────────
+# Variables de entorno
+.env
+
+# Entornos virtuales
+.venv/
+venv/
+
+# Caché compilada de Python (¡Sin barra inicial para que actúe de forma global!)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos generados localmente
+diringest_output.txt
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: Model-Schemas.md
+──────────────────────────────────────────────────────────────────────
+# Dominio 1
+## usuarioModels
+```
+import uuid
+
+from typing import Optional, List
+
+from datetime import datetime, timezone
+
+from sqlmodel import SQLModel, Field, Relationship
+
+from sqlalchemy import Column, CHAR
+
+  
+
+# ==========================================
+
+# 1. TABLAS INTERMEDIAS (Link Models)
+
+# ==========================================
+
+  
+
+class UsuarioRol(SQLModel, table=True):
+
+    __tablename__ = "usuario_rol"
+
+    # PK Compuesta
+
+    usuario_id: uuid.UUID = Field(foreign_key="usuario.id", primary_key=True)
+
+    rol_codigo: str = Field(foreign_key="rol.codigo", primary_key=True)
+
+  
+
+    # Atributos extra de la tabla intermedia según UML
+
+    asignado_por_id: Optional[uuid.UUID] = Field(default=None, foreign_key="usuario.id")
+
+    expires_at: Optional[datetime] = None
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+  
+
+# ==========================================
+
+# 2. TABLAS PRINCIPALES
+
+# ==========================================
+
+  
+
+class Rol(SQLModel, table=True):
+
+    __tablename__ = "rol"
+
+    # PK Semántica (El ID es el texto "ADMIN", "CLIENT", etc.)
+
+    codigo: str = Field(primary_key=True, max_length=20)
+
+    nombre: str = Field(unique=True, index=True, max_length=50)
+
+    descripcion: Optional[str] = None
+
+    # Relaciones (N:M)
+
+    usuarios: List["Usuario"] = Relationship(back_populates="roles", link_model=UsuarioRol)
+
+  
+  
+
+class Usuario(SQLModel, table=True):
+
+    __tablename__ = "usuario"
+
+    # id: Optional[int] = Field(default=None, primary_key=True)
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+
+    nombre: str = Field(max_length=80)
+
+    apellido: str = Field(max_length=80)
+
+    email: str = Field(unique=True, index=True, max_length=254)
+
+    celular: Optional[str] = Field(default=None, max_length=20)
+
+    # Se fuerza el uso de CHAR(60) exacto para el hash de bcrypt
+
+    password_hash: str = Field(sa_column=Column(CHAR(60), nullable=False))
+
+  
+
+    # Audit (Reemplaza a 'disabled')
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    deleted_at: Optional[datetime] = None
+
+    # Relaciones
+
+    roles: List[Rol] = Relationship(back_populates="usuarios", link_model=UsuarioRol)
+
+    refresh_tokens: List["RefreshToken"] = Relationship(back_populates="usuario")
+
+    direcciones: List["DireccionEntrega"] = Relationship(back_populates="usuario")
+
+  
+  
+
+# ==========================================
+
+# 3. ENTIDADES ASOCIADAS (Dominio 1)
+
+# ==========================================
+
+  
+
+class RefreshToken(SQLModel, table=True):
+
+    __tablename__ = "refresh_token"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+  
+
+    # usuario_id: int = Field(foreign_key="usuario.id")
+
+    usuario_id: uuid.UUID = Field(foreign_key="usuario.id")
+
+    token_hash: str = Field(sa_column=Column(CHAR(64), unique=True, nullable=False))
+
+    expires_at: datetime
+
+    revoked_at: Optional[datetime] = None
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+  
+
+    usuario: Usuario = Relationship(back_populates="refresh_tokens")
+
+  
+  
+
+class DireccionEntrega(SQLModel, table=True):
+
+    __tablename__ = "direccion_entrega"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # usuario_id: int = Field(foreign_key="usuario.id")
+
+    usuario_id: uuid.UUID = Field(foreign_key="usuario.id")
+
+    alias: Optional[str] = Field(default=None, max_length=50)
+
+    linea1: str
+
+    linea2: Optional[str] = None
+
+    ciudad: str = Field(max_length=100)
+
+    provincia: Optional[str] = Field(default=None, max_length=100)
+
+    codigo_postal: Optional[str] = Field(default=None, max_length=10)
+
+    latitud: Optional[float] = None
+
+    longitud: Optional[float] = None
+
+    es_principal: bool = Field(default=False)
+
+  
+
+    # Audit
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    deleted_at: Optional[datetime] = None
+
+  
+
+    usuario: Usuario = Relationship(back_populates="direcciones")
+```
+## usuarioSchemas 
+
+```
+# --- Sub-Schemas para mostrar en la respuesta pública ---
+
+class RolPublic(BaseModel):
+
+    codigo: str
+
+    nombre: str
+
+    # descripcion: Optional[str] = None
+
+  
+
+# --- Entrada de datos (POST /register) ---
+
+class UserCreate(BaseModel):
+
+    nombre: str = Field(..., max_length=80)
+
+    apellido: str = Field(..., max_length=80)
+
+    email: EmailStr
+
+    celular: Optional[str] = Field(default=None, max_length=20)
+
+    password: str = Field(min_length=8)# poner limite
+
+# --- Salida de datos (GET /me, Respuesta de Login/Register) ---
+
+class UserPublic(BaseModel):
+
+    id: uuid.UUID
+
+    nombre: str
+
+    apellido: str
+
+    email: str
+
+    celular: Optional[str] = None
+
+    roles: List[RolPublic] = []
+
+  
+
+# --- Respuesta del Login ---
+
+class Token(BaseModel):
+
+    access_token: str
+
+    token_type: str = "bearer"
+
+    expires_in: int
+```
+
+# Dominio 2
+## categoria
+### Models
+```
+from typing import TYPE_CHECKING, Optional
+
+from app.modules.producto.models import ProductoCategoria
+from ..base.models import BaseModel
+from sqlmodel import Field, Relationship
+
+# Evitar las importaciones circulares
+if TYPE_CHECKING:
+    from ..producto.models import Producto
+
+
+class Categoria(BaseModel, table=True):
+    __tablename__ = "categorias"
+    
+    parent_id: int | None = Field(
+        default=None,
+        foreign_key="categorias.id",
+        description="FK a categoría padre"
+    )
+    
+    nombre: str = Field(..., unique=True, max_length=100, description="Nombre de la categoría")
+    
+    descripcion: str | None = Field(default=None, description="Descripción")
+    
+    imagen_url: str = Field(..., description="URL de imagen de la categoría")
+
+    parent: Optional["Categoria"] = Relationship(
+        back_populates="children",
+        sa_relationship_kwargs={"remote_side": "Categoria.id"}
+    )
+    
+    children: list["Categoria"] = Relationship(
+        back_populates="parent"
+    )
+
+    # Relación con productos a través de la tabla intermedia
+    productos: list["Producto"] = Relationship(
+        back_populates="categorias",
+        link_model=ProductoCategoria
+    )
+```
+
+### Schemas
+```
+from typing import Optional
+from sqlmodel import Field, SQLModel
+
+
+class ProductoBasicRead(SQLModel):
+    id: int
+    nombre: str
+
+
+# ─── Base ─────────────────────────────────────────────────────────────────────────────────
+
+
+class CategoriaBase(SQLModel):
+    parent_id: Optional[int] = None
+    nombre: str = Field(...,
+                        description="Nombre de la categoría", max_length=100)
+    descripcion: Optional[str] = Field(default=None, description="Descripción de la categoría")    
+    imagen_url: str = Field(..., description="URL de imagen de la categoría")
+
+
+# ─── Request schemas ──────────────────────────────────────────────────────────────────────
+class CategoriaCreate(CategoriaBase):
+    pass
+
+
+class CategoriaUpdate(SQLModel):
+    parent_id: Optional[int] = None
+    nombre: Optional[str] = Field(
+        default=None, description="Nombre de la categoría", max_length=100)
+    descripcion: Optional[str] = Field(
+        default=None, description="Descripción de la categoría")
+    imagen_url: Optional[str] = Field(
+        default=None, description="URL de imagen de la categoría")
+
+
+# ─── Response schemas ────────────────────────────────────────────────────────────────────
+
+
+class CategoriaRead(CategoriaBase):
+    id: int = Field(..., description="ID de la categoría")
+
+
+class CategoriaReadSimple(CategoriaRead):
+    """Categoría sin subcategorías - para listados"""
+    pass
+
+
+class CategoriaReadFull(CategoriaRead):
+    productos: list[ProductoBasicRead] = Field(
+        default_factory=list, description="Lista de productos")
+
+
+#Se puede borrar? Revisar a lo ultimo
+class CategoriaReadWithSubs(CategoriaRead):
+    """Categoría con subcategorías - para árbol"""
+    subcategorias: list[CategoriaReadSimple] = Field(
+        default_factory=list,
+        description="Subcategorías hijo"
+    )
+
+
+class CategoriaTreeNode(CategoriaRead):
+    subcategorias: list["CategoriaTreeNode"] = Field(
+        default_factory=list,
+        description="Subcategorías anidadas"
+    )
+
+
+class CategoriaList(SQLModel):
+    data: list[CategoriaReadFull]
+    total: int
+
+
+class CategoriaTreeList(SQLModel):
+    data: list[CategoriaTreeNode]
+    total: int
+
+
+CategoriaTreeNode.model_rebuild()
+```
+
+## Ingredientes
+### Models
+```
+from typing import TYPE_CHECKING
+from ..base.models import BaseModel
+from sqlmodel import Field, Relationship
+from ..producto.models import ProductoIngrediente
+
+if TYPE_CHECKING:
+    from ..producto.models import Producto
+
+class Ingrediente(BaseModel, table=True):
+    __tablename__ = "ingredientes"
+    nombre: str = Field(...,unique=True, description="Nombre del ingrediente")
+    es_alergeno: bool = Field(default=False, description="Indica si el ingrediente es un alérgeno")
+    descripcion: str | None = Field(default=None, description="Descripción del ingrediente")
+    
+    # Relación con productos a través de la tabla intermedia
+    productos: list["Producto"] = Relationship(
+        back_populates="ingredientes",
+        link_model=ProductoIngrediente
+    )
+```
+### Schemas
+```
+from typing import Optional
+from sqlmodel import SQLModel, Field
+
+
+# Esquema reducido local para evitar dependencia circular
+class ProductoBasicRead(SQLModel):
+    id: int
+    nombre: str
+# ─── Base ─────────────────────────────────────────────────────────────────────────────────
+
+
+class IngredienteBase(SQLModel):
+    nombre: str = Field(..., description="Nombre del ingrediente")
+    es_alergeno: bool = Field(
+        default=False, description="Indica si el ingrediente es un alérgeno")
+    descripcion: Optional[str] = Field(default=None, description="Descripción del ingrediente")
+
+
+# ─── Request schemas ──────────────────────────────────────────────────────────────────────
+
+
+class IngredienteCreate(IngredienteBase):
+    pass
+
+
+class IngredienteUpdate(SQLModel):
+    nombre: Optional[str] = Field(
+        default=None, description="Nombre del ingrediente")
+    es_alergeno: Optional[bool] = Field(
+        default=None, description="Indica si el ingrediente es un alérgeno")
+    descripcion: Optional[str] = Field(
+        default=None, description="Descripción del ingrediente")
+
+
+# ─── Response schemas ────────────────────────────────────────────────────────────────────
+
+class IngredienteRead(IngredienteBase):
+    id: int = Field(..., description="ID del ingrediente")
+
+
+class IngredienteBasicRead(SQLModel):
+    id: int = Field(..., description="ID del ingrediente")
+    nombre: str = Field(..., description="Nombre del ingrediente")
+
+
+class IngredienteReadFull(IngredienteRead):
+    productos: list[ProductoBasicRead] = Field(
+        default_factory=list, description="Lista de productos")
+
+
+class IngredienteList(SQLModel):
+    data: list[IngredienteReadFull]
+    total: int
+```
+
+## Productos
+### Models
+```
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import TYPE_CHECKING, Optional
+from pydantic import field_validator
+from ..base.models import BaseModel
+from sqlmodel import Field, Relationship, Column, Integer, ForeignKey, SQLModel, ARRAY, String
+from sqlalchemy import CheckConstraint, Numeric
+
+
+if TYPE_CHECKING:
+    from ..categoria.models import Categoria
+    from ..ingrediente.models import Ingrediente
+
+
+class ProductoCategoria(SQLModel, table=True):
+    __tablename__ = "producto_categoria"
+    
+    # La combinación de producto_id y categoria_id para evitar duplicados de relacion
+    producto_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("productos.id", ondelete="CASCADE"),  #borra relaciones si se borra el producto
+        primary_key=True, nullable=False)
+    )
+    categoria_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("categorias.id", ondelete="RESTRICT"), #no permite borrar categoria si tiene productos relacionados
+        primary_key=True, nullable=False)
+    )
+    es_principal: bool = Field(default=False, description="Indica si es categoría principal del producto")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+class ProductoIngrediente(SQLModel, table=True):
+    __tablename__ = "producto_ingrediente"
+    
+    producto_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("productos.id", ondelete="CASCADE"), 
+        primary_key=True, nullable=False)
+    )
+    ingrediente_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("ingredientes.id", ondelete="RESTRICT"), 
+        primary_key=True, nullable=False)
+    )
+    es_removible: bool = Field(default=False, description="Indica si el ingrediente es removible")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+class Producto(BaseModel, table=True):
+    __tablename__ = "productos"
+
+    # Constraint a nivel de BD: última línea de defensa
+    __table_args__ = (
+        CheckConstraint("precio_base >= 0", name="ck_producto_precio_no_negativo"),
+    )
+
+    #no puede ser nulo
+    nombre: str = Field(..., description="Nombre del producto", max_length=150)
+    descripcion: Optional[str] = Field(default=None, description="Descripción del producto")
+    #no puede ser nulo y checar que sea mayor o igual a 0
+    precio_base: Decimal = Field(
+        sa_column=Column(Numeric(10, 2), nullable=False),
+        description="Precio base del producto"
+    )
+    imagenes_url: Optional[list[str]] = Field(default=None, sa_column=Column(ARRAY(String)))    
+    stock_cantidad: int = Field(default=0, ge=0, description="Cantidad en stock")
+    disponible: bool = Field(default=True, description="Si el producto está disponible para venta")
+    
+    # ── Validador de dominio (capa Python) ────────────────────────────────
+    @field_validator("precio_base")
+    @classmethod
+    def precio_no_negativo(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("El precio base no puede ser negativo")
+        return v
+
+    # Relaciones N:N Bidireccional
+    categorias: list["Categoria"] = Relationship(
+        back_populates="productos",
+        link_model=ProductoCategoria
+    )
+    ingredientes: list["Ingrediente"] = Relationship(
+        back_populates="productos",
+        link_model=ProductoIngrediente
+    )
+```
+
+### Schemas
+```
+from decimal import Decimal
+from typing import Optional
+from sqlmodel import SQLModel, Field
+
+
+class CategoriaBasicRead(SQLModel):
+    id: int
+    nombre: str
+    es_principal: bool = Field(
+        default=False, description="Si es categoría principal")
+
+
+class IngredienteBasicRead(SQLModel):
+    id: int
+    nombre: str
+    es_alergeno: bool = Field(default=False, description="Si es alérgeno")
+
+
+# ─── Base ─────────────────────────────────────────────────────────────────────────────────
+
+
+class ProductoBase(SQLModel):
+    nombre: str = Field(..., description="Nombre del producto", max_length=150)
+    descripcion: Optional[str] = Field(
+        default=None, description="Descripción del producto")
+    precio_base: Decimal = Field(..., description="Precio del producto", ge=0)
+    imagenes_url: Optional[list[str]] = Field(
+        default=None, description="URLs de imágenes del producto")
+    stock_cantidad: int = Field(
+        default=0, ge=0, description="Cantidad en stock")
+    disponible: bool = Field(
+        default=True, description="Indica si el producto está disponible")
+
+# ─── Request schemas ──────────────────────────────────────────────────────────────────────
+
+
+class ProductoCreate(ProductoBase):
+    categoria_ids: list[int] = Field(
+        ..., 
+        min_length=1, 
+        description="Lista de IDs de categorías a las que pertenece (obligatorio, mínimo 1)"
+    )
+    ingrediente_ids: Optional[list[int]] = Field(
+        default=None, 
+        description="Lista opcional de IDs de ingredientes"
+    )
+
+
+class ProductoUpdate(SQLModel):
+    nombre: Optional[str] = Field(
+        default=None, description="Nombre del producto", max_length=150)
+    descripcion: Optional[str] = Field(
+        default=None, description="Descripción del producto")
+    precio_base: Optional[Decimal] = Field(
+        default=None, description="Precio del producto", ge=0)
+    imagenes_url: Optional[list[str]] = Field(
+        default=None, description="URLs de imágenes del producto")
+    stock_cantidad: Optional[int] = Field(
+        default=None, description="Cantidad en stock", ge=0)
+    disponible: Optional[bool] = Field(
+        default=None, description="Indica si el producto está disponible")
+    categoria_ids: Optional[list[int]] = Field(
+        default=None, min_length=1, description="Lista opcional de IDs de categorías para actualizar"
+    )
+    ingrediente_ids: Optional[list[int]] = Field(
+        default=None, description="Lista opcional de IDs de ingredientes para actualizar"
+    )
+
+# ─── Response schemas ────────────────────────────────────────────────────────────────────
+
+
+class ProductoRead(ProductoBase):
+    id: int = Field(..., description="ID del producto")
+
+
+class ProductoBasicRead(SQLModel):
+    id: int = Field(..., description="ID del producto")
+    nombre: str = Field(..., description="Nombre del producto")
+    precio_base: Decimal = Field(..., description="Precio del producto", ge=0)
+    imagenes_url: Optional[list[str]] = Field(
+        default=None, description="URLs de imágenes del producto")
+
+
+class ProductoReadFull(ProductoRead):
+    """Producto con categorías e ingredientes"""
+    categorias: list[CategoriaBasicRead] = Field(default_factory=list)
+    ingredientes: list[IngredienteBasicRead] = Field(default_factory=list)
+
+
+# Facilita al frontend obtener el total de productos
+# para paginación sin hacer una consulta extra
+class ProductoList(SQLModel):
+    data: list[ProductoReadFull]
+    total: int = Field(..., description="Total de productos disponibles")
+```
+# Dominio 3
+
+![[Pasted image 20260515140421.png]]
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: README.md
+──────────────────────────────────────────────────────────────────────
+# Tuki-FoodStore API 🚀
+
+Este es el núcleo de procesamiento de la plataforma **Tuki-FoodStore**, una API REST profesional desarrollada con **FastAPI** y **SQLModel**. El proyecto implementa una arquitectura modular diseñada para gestionar relaciones complejas entre productos, categorías e ingredientes, garantizando la integridad de los datos y un alto rendimiento en las consultas.
+
+## 🛠️ Tecnologías Utilizadas
+
+* **Framework:** FastAPI (Python 3.10+).
+* **ORM:** SQLModel (basado en SQLAlchemy y Pydantic).
+* **Base de Datos:** PostgreSQL (v15+).
+* **Gestión de Transacciones:** Implementación de los patrones **Unit of Work** y **Repository**.
+* **Contenerización:** Docker y Docker Compose para el entorno de base de datos.
+
+## 📂 Estructura del Proyecto
+
+El código está organizado siguiendo una estructura modular por dominios:
+* `app/core/`: Configuración global, conexión a base de datos y clases base del repositorio.
+* `app/modules/`: Lógica de negocio dividida en módulos: `categoria`, `producto`, `ingrediente` y tablas intermedias para relaciones N:M.
+* `app/utils/`: Manejadores globales de errores y excepciones personalizadas.
+
+## 🌟 Características Principales
+
+* **Relaciones N:M:** Gestión avanzada de productos con múltiples categorías e ingredientes, incluyendo lógica de "Categoría Principal" y "Ingrediente Alérgeno".
+* **Carga Eficiente:** Uso de `selectinload` para evitar el problema de N+1 queries al traer datos relacionados.
+* **Borrado Lógico:** Implementación de `deleted_at` para preservar la integridad referencial.
+* **Paginación:** Endpoints optimizados con `offset` y `limit` mediante `Annotated` y `Query`.
+
+## 🚀 Instalación y Uso
+
+1.  **Clonar el repositorio:**
+    ```bash
+    git clone [https://github.com/tu-usuario/FoodStore-Backend.git](https://github.com/tu-usuario/FoodStore-Backend.git)
+    ```
+2.  **Configurar variables de entorno:** Crear un archivo `.env` basado en `Variables de entorno.md`.
+3.  **Iniciar base de datos:**
+    ```bash
+    docker-compose up -d
+    ```
+4.  **Instalar dependencias e iniciar:**
+    ```bash
+    pip install -r requirements.txt
+    fastapi dev main.py
+    ```
+5.  **Cargar datos de prueba:**
+    ```bash
+    python seed.py
+    ```
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: Variables de entorno.md
+──────────────────────────────────────────────────────────────────────
+```
+POSTGRES_DB={}
+
+POSTGRES_USER={}
+
+POSTGRES_PASSWORD={}
+
+DATABASE_URL = "postgresql+psycopg://{user}:{password}@localhost:5432/{db_name}"
+```
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: alembic.ini
+──────────────────────────────────────────────────────────────────────
+# A generic, single database configuration.
+
+[alembic]
+# path to migration scripts.
+# this is typically a path given in POSIX (e.g. forward slashes)
+# format, relative to the token %(here)s which refers to the location of this
+# ini file
+script_location = %(here)s/alembic
+
+# template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
+# Uncomment the line below if you want the files to be prepended with date and time
+# see https://alembic.sqlalchemy.org/en/latest/tutorial.html#editing-the-ini-file
+# for all available tokens
+# file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s
+# Or organize into date-based subdirectories (requires recursive_version_locations = true)
+# file_template = %%(year)d/%%(month).2d/%%(day).2d_%%(hour).2d%%(minute).2d_%%(second).2d_%%(rev)s_%%(slug)s
+
+# sys.path path, will be prepended to sys.path if present.
+# defaults to the current working directory.  for multiple paths, the path separator
+# is defined by "path_separator" below.
+prepend_sys_path = .
+
+
+# timezone to use when rendering the date within the migration file
+# as well as the filename.
+# If specified, requires the tzdata library which can be installed by adding
+# `alembic[tz]` to the pip requirements.
+# string value is passed to ZoneInfo()
+# leave blank for localtime
+# timezone =
+
+# max length of characters to apply to the "slug" field
+# truncate_slug_length = 40
+
+# set to 'true' to run the environment during
+# the 'revision' command, regardless of autogenerate
+# revision_environment = false
+
+# set to 'true' to allow .pyc and .pyo files without
+# a source .py file to be detected as revisions in the
+# versions/ directory
+# sourceless = false
+
+# version location specification; This defaults
+# to <script_location>/versions.  When using multiple version
+# directories, initial revisions must be specified with --version-path.
+# The path separator used here should be the separator specified by "path_separator"
+# below.
+# version_locations = %(here)s/bar:%(here)s/bat:%(here)s/alembic/versions
+
+# path_separator; This indicates what character is used to split lists of file
+# paths, including version_locations and prepend_sys_path within configparser
+# files such as alembic.ini.
+# The default rendered in new alembic.ini files is "os", which uses os.pathsep
+# to provide os-dependent path splitting.
+#
+# Note that in order to support legacy alembic.ini files, this default does NOT
+# take place if path_separator is not present in alembic.ini.  If this
+# option is omitted entirely, fallback logic is as follows:
+#
+# 1. Parsing of the version_locations option falls back to using the legacy
+#    "version_path_separator" key, which if absent then falls back to the legacy
+#    behavior of splitting on spaces and/or commas.
+# 2. Parsing of the prepend_sys_path option falls back to the legacy
+#    behavior of splitting on spaces, commas, or colons.
+#
+# Valid values for path_separator are:
+#
+# path_separator = :
+# path_separator = ;
+# path_separator = space
+# path_separator = newline
+#
+# Use os.pathsep. Default configuration used for new projects.
+path_separator = os
+
+# set to 'true' to search source files recursively
+# in each "version_locations" directory
+# new in Alembic version 1.10
+# recursive_version_locations = false
+
+# the output encoding used when revision files
+# are written from script.py.mako
+# output_encoding = utf-8
+
+# database URL.  This is consumed by the user-maintained env.py script only.
+# other means of configuring database URLs may be customized within the env.py
+# file.
+sqlalchemy.url = driver://user:pass@localhost/dbname
+
+
+[post_write_hooks]
+# post_write_hooks defines scripts or Python functions that are run
+# on newly generated revision scripts.  See the documentation for further
+# detail and examples
+
+# format using "black" - use the console_scripts runner, against the "black" entrypoint
+# hooks = black
+# black.type = console_scripts
+# black.entrypoint = black
+# black.options = -l 79 REVISION_SCRIPT_FILENAME
+
+# lint with attempts to fix using "ruff" - use the module runner, against the "ruff" module
+# hooks = ruff
+# ruff.type = module
+# ruff.module = ruff
+# ruff.options = check --fix REVISION_SCRIPT_FILENAME
+
+# Alternatively, use the exec runner to execute a binary found on your PATH
+# hooks = ruff
+# ruff.type = exec
+# ruff.executable = ruff
+# ruff.options = check --fix REVISION_SCRIPT_FILENAME
+
+# Logging configuration.  This is also consumed by the user-maintained
+# env.py script only.
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARNING
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARNING
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: diringest.py
+──────────────────────────────────────────────────────────────────────
+#!/usr/bin/env python3
+"""
+diringest.py — Convierte un directorio local en un único archivo de texto plano,
+listo para usar como contexto en un LLM (estilo GitIngest pero sin git).
+
+Uso:
+    python diringest.py                  # directorio actual
+    python diringest.py /ruta/al/proyecto
+    python diringest.py /ruta --output resultado.txt
+"""
+
+import os
+import sys
+import argparse
+from pathlib import Path
+
+# ── Archivos/carpetas ignorados por defecto ────────────────────────────────────
+DEFAULT_IGNORE_DIRS = {
+    ".git", ".svn", ".hg",
+    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    "node_modules", ".npm", ".yarn",
+    "venv", ".venv", "env", ".env",
+    "dist", "build", "out", ".next", ".nuxt",
+    ".idea", ".vscode",
+    "coverage", ".coverage",
+}
+
+DEFAULT_IGNORE_FILES = {
+    ".DS_Store", "Thumbs.db", "desktop.ini",
+    "*.pyc", "*.pyo", "*.pyd",
+    "*.class", "*.o", "*.obj", "*.exe", "*.dll", "*.so", "*.dylib",
+    "*.zip", "*.tar", "*.gz", "*.rar", "*.7z",
+    "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.ico", "*.svg", "*.webp",
+    "*.mp3", "*.mp4", "*.wav", "*.avi", "*.mov",
+    "*.pdf", "*.doc", "*.docx", "*.xls", "*.xlsx",
+    "*.lock",           # package-lock.json, yarn.lock, Pipfile.lock, etc.
+    "*.min.js", "*.min.css",
+}
+
+MAX_FILE_SIZE_MB = 1  # archivos más grandes se omiten
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def load_gitignore(root: Path) -> list[str]:
+    """Lee .gitignore del directorio raíz y devuelve los patrones."""
+    gitignore = root / ".gitignore"
+    if not gitignore.exists():
+        return []
+    patterns = []
+    for line in gitignore.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            patterns.append(line)
+    return patterns
+
+
+def matches_gitignore(path: Path, root: Path, patterns: list[str]) -> bool:
+    """Comprobación simple de patrones .gitignore (sin dependencias externas)."""
+    rel = path.relative_to(root)
+    rel_str = str(rel).replace("\\", "/")
+    name = path.name
+
+    for pattern in patterns:
+        # Patrón de directorio (termina en /)
+        p = pattern.rstrip("/")
+        # Coincidencia por nombre
+        if _fnmatch(name, p):
+            return True
+        # Coincidencia por ruta relativa
+        if _fnmatch(rel_str, p):
+            return True
+        # Patrón con slash → relativo a la raíz
+        if "/" in p and _fnmatch(rel_str, p.lstrip("/")):
+            return True
+    return False
+
+
+def _fnmatch(name: str, pattern: str) -> bool:
+    import fnmatch
+    return fnmatch.fnmatch(name, pattern)
+
+
+def matches_default_ignore(path: Path) -> bool:
+    import fnmatch
+    if path.is_dir():
+        return path.name in DEFAULT_IGNORE_DIRS
+    for pat in DEFAULT_IGNORE_FILES:
+        if fnmatch.fnmatch(path.name, pat):
+            return True
+    return False
+
+
+def is_binary(filepath: Path) -> bool:
+    """Detecta si un archivo es binario leyendo los primeros 8 KB."""
+    try:
+        with open(filepath, "rb") as f:
+            chunk = f.read(8192)
+        return b"\x00" in chunk
+    except OSError:
+        return True
+
+
+def collect_files(root: Path, gitignore_patterns: list[str]) -> list[Path]:
+    """Recorre el directorio y devuelve los archivos a incluir, ordenados."""
+    files = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        current = Path(dirpath)
+
+        # Filtrar subdirectorios in-place para que os.walk no los visite
+        dirnames[:] = sorted([
+            d for d in dirnames
+            if not matches_default_ignore(current / d)
+            and not matches_gitignore(current / d, root, gitignore_patterns)
+        ])
+
+        for fname in sorted(filenames):
+            fpath = current / fname
+            if matches_default_ignore(fpath):
+                continue
+            if matches_gitignore(fpath, root, gitignore_patterns):
+                continue
+            files.append(fpath)
+
+    return files
+
+
+# ── Generador principal ────────────────────────────────────────────────────────
+
+def build_tree(root: Path, files: list[Path]) -> str:
+    """Genera un árbol de directorios estilo Unix."""
+    lines = [str(root.resolve())]
+    seen_dirs: set[Path] = set()
+    entries: list[tuple[Path, bool]] = []  # (path, is_file)
+
+    for f in files:
+        # Agregar directorios intermedios
+        for parent in reversed(f.relative_to(root).parents):
+            if parent == Path("."):
+                continue
+            abs_parent = root / parent
+            if abs_parent not in seen_dirs:
+                seen_dirs.add(abs_parent)
+                entries.append((abs_parent, False))
+        entries.append((f, True))
+
+    for path, is_file in entries:
+        rel = path.relative_to(root)
+        depth = len(rel.parts) - 1
+        prefix = "    " * depth + ("├── " if is_file else "📁 ")
+        lines.append(prefix + path.name)
+
+    return "\n".join(lines)
+
+
+def ingest(root: Path, output: Path | None = None) -> None:
+    print(f"📂 Procesando: {root.resolve()}")
+
+    gitignore_patterns = load_gitignore(root)
+    files = collect_files(root, gitignore_patterns)
+
+    sections = []
+
+    # ── Encabezado ──────────────────────────────────────────────────────────
+    sections.append(f"{'='*70}")
+    sections.append(f"DIRECTORIO: {root.resolve()}")
+    sections.append(f"ARCHIVOS INCLUIDOS: {len(files)}")
+    sections.append(f"{'='*70}\n")
+
+    # ── Árbol ───────────────────────────────────────────────────────────────
+    sections.append("── ESTRUCTURA ──\n")
+    sections.append(build_tree(root, files))
+    sections.append("")
+
+    # ── Contenido ───────────────────────────────────────────────────────────
+    sections.append("\n── CONTENIDO DE ARCHIVOS ──\n")
+
+    skipped = []
+    for fpath in files:
+        rel = fpath.relative_to(root)
+        size_mb = fpath.stat().st_size / (1024 * 1024)
+
+        header = f"\n{'─'*70}\nARCHIVO: {rel}\n{'─'*70}"
+
+        if size_mb > MAX_FILE_SIZE_MB:
+            skipped.append(str(rel))
+            sections.append(header)
+            sections.append(f"[omitido — tamaño {size_mb:.1f} MB supera el límite de {MAX_FILE_SIZE_MB} MB]")
+            continue
+
+        if is_binary(fpath):
+            skipped.append(str(rel))
+            sections.append(header)
+            sections.append("[omitido — archivo binario]")
+            continue
+
+        try:
+            content = fpath.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            sections.append(header)
+            sections.append(f"[error al leer: {e}]")
+            continue
+
+        sections.append(header)
+        sections.append(content)
+
+    # ── Resumen final ────────────────────────────────────────────────────────
+    if skipped:
+        sections.append(f"\n{'='*70}")
+        sections.append(f"ARCHIVOS OMITIDOS ({len(skipped)}):")
+        for s in skipped:
+            sections.append(f"  - {s}")
+
+    result = "\n".join(sections)
+
+    # ── Guardar o imprimir ───────────────────────────────────────────────────
+    if output is None:
+        output = root / "diringest_output.txt"
+
+    output.write_text(result, encoding="utf-8")
+    print(f"✅ Listo: {output.resolve()}")
+    print(f"   {len(files)} archivos procesados, {len(skipped)} omitidos")
+    print(f"   Tamaño del output: {output.stat().st_size / 1024:.1f} KB")
+
+
+# ── CLI ────────────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Convierte un directorio en un archivo de texto plano para LLMs."
+    )
+    parser.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Directorio a procesar (por defecto: directorio actual)",
+    )
+    parser.add_argument(
+        "--output", "-o",
+        help="Archivo de salida (por defecto: diringest_output.txt dentro del directorio)",
+    )
+    args = parser.parse_args()
+
+    root = Path(args.directory).resolve()
+    if not root.is_dir():
+        print(f"❌ Error: '{root}' no es un directorio válido.")
+        sys.exit(1)
+
+    output = Path(args.output).resolve() if args.output else None
+    ingest(root, output)
+
+
+if __name__ == "__main__":
+    main()
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: docker-compose.yml
+──────────────────────────────────────────────────────────────────────
+services:
+  db:
+    image: postgres:15
+    env_file:
+      - .env
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: main.py
+──────────────────────────────────────────────────────────────────────
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from sqlmodel import SQLModel
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.database import engine
+
+from app.modules.dominio_2.categoria.router import router as categoria_router
+from app.modules.dominio_2.producto.router import router as producto_router
+from app.modules.dominio_2.ingrediente.router import router as ingrediente_router
+from app.modules.dominio_1.usuario.routers import router as usuario_router
+
+from app.utils.errores import manejar_http_exceptions, manejar_validaciones
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    SQLModel.metadata.create_all(engine)
+    yield
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Tuki-FoodStore API",
+        description="Parcial Programación IV - Implementación Profesional de Relaciones Complejas",
+        version="1.0.0",
+        lifespan=lifespan
+    )
+
+    origenes_permitidos = [
+        "http://localhost:5173",  # Puerto por defecto de Vite (React)
+        "http://localhost:3000",  # Puerto por defecto de Create React App
+        "http://127.0.0.1:5173",
+    ]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origenes_permitidos, # URLs permitidas
+        allow_credentials=True,
+        allow_methods=["*"], # Permite todos los métodos HTTP
+        allow_headers=["*"], # Permite todos los headers
+    )
+
+    
+    app.include_router(categoria_router)
+    app.include_router(producto_router)
+    app.include_router(ingrediente_router)
+    app.include_router(usuario_router)
+
+    app.add_exception_handler(HTTPException, manejar_http_exceptions)
+    app.add_exception_handler(RequestValidationError, manejar_validaciones)
+
+    return app
+
+app = create_app()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: requirements.txt
+──────────────────────────────────────────────────────────────────────
+fastapi[standard]
+sqlmodel
+psycopg[binary]==3.3.3
+python-dotenv==1.2.2
+alembic
+pydantic-settings
+pytest
+httpx
+
+# --- Librerías de Seguridad ---
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+python-multipart==0.0.20
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: reset.py
+──────────────────────────────────────────────────────────────────────
+from sqlalchemy import text
+from app.core.database import engine
+
+def nuke_database():
+    with engine.connect() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS producto_ingrediente CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS producto_categoria CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS productos CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS ingredientes CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS categorias CASCADE;"))
+        conn.commit()
+    print("💥 Base de datos reseteada.")
+
+if __name__ == "__main__":
+    nuke_database()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: seed.py
+──────────────────────────────────────────────────────────────────────
+"""
+Script de seed para desarrollo.
+Ejecutar: python seed.py
+Crea datos de prueba para demostrar el flujo completo.
+"""
+from decimal import Decimal
+from sqlmodel import Session, SQLModel
+from app.core.database import engine
+from app.modules.dominio_2.categoria.models import Categoria
+from app.modules.dominio_2.ingrediente.models import Ingrediente
+from app.modules.dominio_2.producto.models import Producto
+from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
+
+def seed():
+    SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+
+        # ── CATEGORÍAS ──────────────────────────────────────────────
+        hamburguesas = Categoria(nombre="Hamburguesas", descripcion="Nuestras burgers artesanales")
+        bebidas      = Categoria(nombre="Bebidas",      descripcion="Frias y calientes")
+        postres      = Categoria(nombre="Postres",      descripcion="Para cerrar con dulzura")
+        session.add_all([hamburguesas, bebidas, postres])
+        session.flush()
+
+        # Subcategorías
+        veganas     = Categoria(nombre="Veganas",       descripcion="100% plant-based",         parent_id=hamburguesas.id)
+        sin_tacc    = Categoria(nombre="Sin TACC",      descripcion="Libres de gluten",          parent_id=hamburguesas.id)
+        gaseosas    = Categoria(nombre="Gaseosas",      descripcion="Bebidas con gas",           parent_id=bebidas.id)
+        session.add_all([veganas, sin_tacc, gaseosas])
+        session.flush()
+
+        # ── INGREDIENTES ─────────────────────────────────────────────
+        pan_brioche  = Ingrediente(nombre="Pan Brioche",       descripcion="Pan suave y esponjoso",       es_alergeno=True)
+        pan_sin_tacc = Ingrediente(nombre="Pan Sin TACC",      descripcion="Pan libre de gluten",         es_alergeno=False)
+        carne_250    = Ingrediente(nombre="Carne Vacuna 250g", descripcion="Medallón de res premium",     es_alergeno=False)
+        medallon_veg = Ingrediente(nombre="Medallón Vegano",   descripcion="Base de legumbres y avena",   es_alergeno=False)
+        queso_ch     = Ingrediente(nombre="Queso Cheddar",     descripcion="Cheddar fundido americano",   es_alergeno=True)
+        queso_veg    = Ingrediente(nombre="Queso Vegano",      descripcion="Alternativa plant-based",     es_alergeno=False)
+        lechuga      = Ingrediente(nombre="Lechuga",           descripcion="Lechuga fresca",              es_alergeno=False)
+        tomate       = Ingrediente(nombre="Tomate",            descripcion="Tomate perita en rodajas",    es_alergeno=False)
+        cebolla_c    = Ingrediente(nombre="Cebolla Caramelizada", descripcion="Cebolla dulce",            es_alergeno=False)
+        bacon        = Ingrediente(nombre="Bacon Crocante",    descripcion="Panceta ahumada",             es_alergeno=False)
+        salsa_bbq    = Ingrediente(nombre="Salsa BBQ",         descripcion="Salsa ahumada casera",        es_alergeno=False)
+        mayonesa     = Ingrediente(nombre="Mayonesa",          descripcion="Mayo artesanal",              es_alergeno=True)
+        session.add_all([pan_brioche, pan_sin_tacc, carne_250, medallon_veg,
+                         queso_ch, queso_veg, lechuga, tomate,
+                         cebolla_c, bacon, salsa_bbq, mayonesa])
+        session.flush()
+
+        # ── PRODUCTOS ────────────────────────────────────────────────
+        clasica = Producto(
+            nombre="Hamburguesa Clásica",
+            descripcion="La de siempre, perfecta de siempre.",
+            precio_base=Decimal("1500.00"),
+            imagenes_url=["https://via.placeholder.com/400x300?text=Clasica"],
+            stock_cantidad=50,
+        )
+        bbq = Producto(
+            nombre="Burger BBQ Bacon",
+            descripcion="Ahumada, crocante y con todo.",
+            precio_base=Decimal("1900.00"),
+            imagenes_url=["https://via.placeholder.com/400x300?text=BBQ"],
+            stock_cantidad=30,
+        )
+        vegana = Producto(
+            nombre="Burger Vegana",
+            descripcion="Plant-based sin culpa.",
+            precio_base=Decimal("1800.00"),
+            imagenes_url=["https://via.placeholder.com/400x300?text=Vegana"],
+            stock_cantidad=25,
+        )
+        sin_tacc_prod = Producto(
+            nombre="Burger Sin TACC",
+            descripcion="Para celíacos, sin sacrificar sabor.",
+            precio_base=Decimal("1700.00"),
+            imagenes_url=["https://via.placeholder.com/400x300?text=SinTACC"],
+            stock_cantidad=20,
+        )
+        coca = Producto(
+            nombre="Coca-Cola 500ml",
+            descripcion="La clásica bien fría.",
+            precio_base=Decimal("800.00"),
+            stock_cantidad=100,
+        )
+        limonada = Producto(
+            nombre="Limonada Natural",
+            descripcion="Exprimida al momento.",
+            precio_base=Decimal("700.00"),
+            stock_cantidad=60,
+        )
+        session.add_all([clasica, bbq, vegana, sin_tacc_prod, coca, limonada])
+        session.flush()
+
+        # ── PRODUCTO ↔ CATEGORIA ──────────────────────────────────────
+        session.add(ProductoCategoria(producto_id=clasica.id,      categoria_id=hamburguesas.id, es_principal=True))
+
+        session.add(ProductoCategoria(producto_id=bbq.id,          categoria_id=hamburguesas.id, es_principal=True))
+
+        session.add(ProductoCategoria(producto_id=vegana.id,       categoria_id=hamburguesas.id, es_principal=True))
+        session.add(ProductoCategoria(producto_id=vegana.id,       categoria_id=veganas.id,      es_principal=False))
+
+        session.add(ProductoCategoria(producto_id=sin_tacc_prod.id,categoria_id=hamburguesas.id, es_principal=True))
+        session.add(ProductoCategoria(producto_id=sin_tacc_prod.id,categoria_id=sin_tacc.id,     es_principal=False))
+
+        session.add(ProductoCategoria(producto_id=coca.id,         categoria_id=bebidas.id,      es_principal=True))
+        session.add(ProductoCategoria(producto_id=coca.id,         categoria_id=gaseosas.id,     es_principal=False))
+
+        session.add(ProductoCategoria(producto_id=limonada.id,     categoria_id=bebidas.id,      es_principal=True))
+
+        # ── PRODUCTO ↔ INGREDIENTE ────────────────────────────────────
+        # Clásica
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=pan_brioche.id, es_removible=False))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=carne_250.id,   es_removible=False))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=queso_ch.id,    es_removible=True))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=lechuga.id,     es_removible=True))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=tomate.id,      es_removible=True))
+        session.add(ProductoIngrediente(producto_id=clasica.id, ingrediente_id=mayonesa.id,    es_removible=True))
+
+        # BBQ Bacon
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=pan_brioche.id,  es_removible=False))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=carne_250.id,    es_removible=False))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=bacon.id,        es_removible=True))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=queso_ch.id,     es_removible=True))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=cebolla_c.id,    es_removible=True))
+        session.add(ProductoIngrediente(producto_id=bbq.id, ingrediente_id=salsa_bbq.id,    es_removible=True))
+
+        # Vegana
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=pan_brioche.id,  es_removible=False))
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=medallon_veg.id, es_removible=False))
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=queso_veg.id,    es_removible=True))
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=lechuga.id,      es_removible=True))
+        session.add(ProductoIngrediente(producto_id=vegana.id, ingrediente_id=tomate.id,       es_removible=True))
+
+        # Sin TACC
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=pan_sin_tacc.id, es_removible=False))
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=carne_250.id,    es_removible=False))
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=queso_ch.id,     es_removible=True))
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=lechuga.id,      es_removible=True))
+        session.add(ProductoIngrediente(producto_id=sin_tacc_prod.id, ingrediente_id=tomate.id,       es_removible=True))
+
+        session.commit()
+        print("🌱 Seed OK:")
+        print(f"   • 6 categorías (3 principales + 3 subcategorías)")
+        print(f"   • 12 ingredientes")
+        print(f"   • 6 productos con categorías e ingredientes asignados")
+
+if __name__ == "__main__":
+    seed()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: alembic\README
+──────────────────────────────────────────────────────────────────────
+Generic single-database configuration.
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: alembic\env.py
+──────────────────────────────────────────────────────────────────────
+from logging.config import fileConfig
+
+from sqlalchemy import pool
+from alembic import context
+
+# this is the Alembic Config object, which provides
+# access to the values within the .ini file in use.
+config = context.config
+
+# Interpret the config file for Python logging.
+# This line sets up loggers basically.
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+# add your model's MetaData object here
+# for 'autogenerate' support
+from sqlmodel import SQLModel
+from app.modules.dominio_2.categoria.models import Categoria
+from app.modules.dominio_2.producto.models import Producto
+from app.modules.dominio_2.ingrediente.models import Ingrediente
+from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
+from app.core.database import engine
+
+target_metadata = SQLModel.metadata
+
+# other values from the config, defined by the needs of env.py,
+# can be acquired:
+# my_important_option = config.get_main_option("my_important_option")
+# ... etc.
+
+
+def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode.
+
+    This configures the context with just a URL
+    and not an Engine, though an Engine is acceptable
+    here as well.  By skipping the Engine creation
+    we don't even need a DBAPI to be available.
+
+    Calls to context.execute() here emit the given string to the
+    script output.
+
+    """
+    url = config.get_main_option("sqlalchemy.url")
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode.
+
+    In this scenario we need to create an Engine
+    and associate a connection with the context.
+
+    """
+    connectable = engine
+
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection, target_metadata=target_metadata
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: alembic\script.py.mako
+──────────────────────────────────────────────────────────────────────
+"""${message}
+
+Revision ID: ${up_revision}
+Revises: ${down_revision | comma,n}
+Create Date: ${create_date}
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+${imports if imports else ""}
+
+# revision identifiers, used by Alembic.
+revision: str = ${repr(up_revision)}
+down_revision: Union[str, Sequence[str], None] = ${repr(down_revision)}
+branch_labels: Union[str, Sequence[str], None] = ${repr(branch_labels)}
+depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    ${upgrades if upgrades else "pass"}
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    ${downgrades if downgrades else "pass"}
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: alembic\versions\17a724942c90_initial_migration.py
+──────────────────────────────────────────────────────────────────────
+"""initial migration
+
+Revision ID: 17a724942c90
+Revises: 
+Create Date: 2026-04-24 16:55:41.301230
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+import sqlmodel
+
+
+# revision identifiers, used by Alembic.
+revision: str = '17a724942c90'
+down_revision: Union[str, Sequence[str], None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    pass
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    pass
+    # ### end Alembic commands ###
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\config.py
+──────────────────────────────────────────────────────────────────────
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
+
+class Settings(BaseSettings):
+    DATABASE_URL: str 
+    SECRET_KEY: str  
+
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    SECRET_KEY: str 
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    @model_validator(mode="after")
+    def fix_database_url(self):
+        if self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql://"):
+            self.DATABASE_URL = self.DATABASE_URL.replace("postgresql://","postgresql+psycopg://", 1)
+        return self
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
+settings = Settings()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\database.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import create_engine, Session
+from typing import Annotated
+from fastapi import Depends
+from app.core.config import settings
+
+engine = create_engine(
+    settings.DATABASE_URL,
+    echo=True
+)
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+SessionDep = Annotated[Session, Depends(get_session)]
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\deps.py
+──────────────────────────────────────────────────────────────────────
+"""
+Dependencias de autenticación y autorización para inyectar vía Depends().
+
+Flujo de resolución:
+    Request
+      → oauth2_scheme extrae el Bearer token del header Authorization
+      → get_current_user abre un UoW, decodifica el JWT, carga el usuario
+      → get_current_active_user verifica que disabled=False
+      → require_role([...]) verifica que el rol del usuario esté permitido
+
+Separación semántica de errores HTTP:
+    401 = no autenticado (sin token / token inválido / expirado)
+    403 = autenticado pero sin permisos (rol insuficiente)
+
+Capa: Core (dependencias transversales)
+Conoce a: UoW, Security, Model
+"""
+
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+
+from app.core.security import decode_access_token
+
+from app.modules.dominio_1.usuario.unit_of_work import UsuarioUnitOfWork
+from app.core.database import SessionDep
+from app.modules.dominio_1.usuario.models import Usuario
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+
+# Creamos una pequeña dependencia para instanciar tu UoW
+def get_usuario_uow(session: SessionDep) -> UsuarioUnitOfWork:
+    return UsuarioUnitOfWork(session)
+
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    # Inyectamos tu UoW modular acá
+    uow: Annotated[UsuarioUnitOfWork, Depends(get_usuario_uow)], 
+) -> Usuario:
+    
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Credenciales inválidas o token expirado",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    payload = decode_access_token(token)
+    if payload is None:
+        raise credentials_exception
+
+    username: str | None = payload.get("sub")
+    if username is None:
+        raise credentials_exception
+
+    # Como usamos un UoW específico, "uow.usuarios" existe y autocompleta perfecto
+    with uow:
+        user = uow.usuarios.get_by_username(username)
+
+    if user is None:
+        raise credentials_exception
+
+    return user
+
+async def get_current_active_user(
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> Usuario:
+    """Verifica que el usuario autenticado no esté desactivado."""
+    if current_user.disabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cuenta de usuario desactivada",
+        )
+    return current_user
+
+
+def require_role(allowed_roles: list[str]):
+    """
+    Control de acceso basado en múltiples roles.
+    Comprueba si el usuario tiene al menos uno de los roles requeridos.
+    """
+    async def role_checker(
+        current_user: Annotated[Usuario, Depends(get_current_active_user)],
+    ) -> Usuario:
+        # Extraemos los nombres de los roles que tiene el usuario
+        user_roles_names = [rol.nombre for rol in current_user.roles]
+        
+        # Verificamos si hay alguna intersección entre los roles del user y los permitidos
+        has_permission = any(rol in allowed_roles for rol in user_roles_names)
+        
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Permisos insuficientes. Tus roles son '{user_roles_names}'. "
+                    f"Se requiere al menos uno de: {allowed_roles}"
+                ),
+            )
+        return current_user
+
+    return role_checker
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\enums.py
+──────────────────────────────────────────────────────────────────────
+from enum import Enum
+
+class EstadoFiltro(str, Enum):
+    ACTIVO = "ACTIVO"
+    ELIMINADO = "ELIMINADO"
+    TODOS = "TODOS"
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\repository.py
+──────────────────────────────────────────────────────────────────────
+from typing import Generic, TypeVar, Type, Sequence, Optional
+import uuid
+from sqlmodel import SQLModel, Session, select, func
+from app.core.enums import EstadoFiltro
+
+# Definimos "T" como una variable genérica que representará cualquier tabla (Hero, Team, etc.)
+T = TypeVar("T", bound=SQLModel)
+
+class BaseRepository(Generic[T]):
+    """
+    Plantilla genérica CRUD.
+    Encapsula el acceso a datos. ¡NO HACE COMMIT!
+    """
+    """
+    Repositorio genérico que implementa operaciones CRUD básicas
+    para cualquier modelo basado en SQLModel.
+
+    Principio: el repositorio solo habla con la DB.
+    No contiene lógica de negocio ni levanta HTTPException.
+
+    Este repositorio sirve como clase base para repositorios específicos,
+    donde se agregan queries más complejas o reglas de acceso particulares.
+
+    Tipado:
+    - Usa Generic[ModelT] para mantener tipado fuerte en cada repositorio concreto.
+    """
+
+    def __init__(self, session: Session, model: Type[T]):
+        """
+        Inicializa el repositorio con una sesión de base de datos y el modelo asociado.
+
+        Args:
+            session (Session): Sesión activa de SQLModel/SQLAlchemy.
+                               Es inyectada generalmente por el UnitOfWork.
+            model (Type[ModelT]): Clase del modelo que este repositorio gestiona.
+        """
+        self.session = session
+        self.model = model
+
+
+    def get_by_id(self, record_id: int | uuid.UUID) -> Optional[T]:
+        """
+        Obtiene una entidad por su ID primario.
+
+        Args:
+            record_id (int): Identificador único del registro.
+
+        Returns:
+            ModelT | None: Instancia del modelo si existe, o None si no se encuentra.
+
+        Nota:
+            No lanza excepciones. El manejo de "no encontrado" debe hacerse en la capa de servicio.
+        """
+        return self.session.get(self.model, record_id)
+    
+    def get_all_by_state(
+            self,
+            estado: EstadoFiltro = EstadoFiltro.ACTIVO,
+            offset: int = 0,
+            limit: int = 20
+    ) -> Sequence[T]:
+        statement = select(self.model)
+
+        if hasattr(self.model, "deleted_at"):
+            if estado == EstadoFiltro.ACTIVO:
+                statement = statement.where(self.model.deleted_at.is_(None))
+            elif estado == EstadoFiltro.ELIMINADO:
+                statement = statement.where(self.model.deleted_at.is_not(None))
+        
+        if hasattr(self.model, "created_at"):
+            statement = statement.order_by(self.model.created_at.asc())
+        # elif hasattr(self.model, "id"):
+        #     statement = statement.order_by(self.model.id.asc())
+        
+        return self.session.exec(statement.offset(offset).limit(limit)).all()
+        
+
+
+    # def get_all(self, offset: int = 0, limit: int = 20) -> Sequence[T]:
+    #     """
+    #     Obtiene una lista paginada de entidades.
+
+    #     Args:
+    #         offset (int): Cantidad de registros a omitir (paginación).
+    #         limit (int): Cantidad máxima de registros a devolver.
+
+    #     Returns:
+    #         Sequence[ModelT]: Lista de entidades recuperadas.
+
+    #     Nota:
+    #         No garantiza orden si no se especifica explícitamente en la query.
+    #     """
+    #     return self.session.exec(
+    #         select(self.model).offset(offset).limit(limit)
+    #     ).all()
+    
+    def count_model(self) -> int:
+        """
+        Cuenta el total de registros del modelo.
+        """
+        return self.session.exec(
+            select(func.count()).select_from(self.model)
+        ).one()
+
+
+    def add(self, instance: T) -> T:
+        """
+        Persiste una nueva entidad en la sesión actual.
+
+        Flujo:
+        - add(): marca la entidad para inserción
+        - flush(): ejecuta INSERT en la DB sin commit (genera ID)
+        - refresh(): sincroniza el estado del objeto con la DB
+
+        Args:
+            instance (ModelT): Instancia a persistir.
+
+        Returns:
+            ModelT: La misma instancia, con su ID ya generado.
+
+        Importante:
+            NO hace commit. Esto lo maneja el UnitOfWork.
+        """
+        self.session.add(instance)
+        self.session.flush()  # obtiene el ID sin hacer commit
+        self.session.refresh(instance)
+        return instance
+    
+    def update(self, data: T) -> T:
+        # En SQLModel, hacer un add() de un objeto que ya tiene ID lo actualiza
+        self.session.add(data)
+        return data
+    
+
+    def delete(self, instance: T) -> None:
+        """
+        Marca una entidad para eliminación en la base de datos.
+
+        Flujo:
+        - delete(): marca para borrado
+        - flush(): ejecuta DELETE sin commit
+
+        Args:
+            instance (ModelT): Instancia a eliminar.
+
+        Importante:
+            NO hace commit. El UnitOfWork decide cuándo persistir el cambio.
+        """
+        self.session.delete(instance)
+        self.session.flush()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\security.py
+──────────────────────────────────────────────────────────────────────
+"""
+Utilidades de seguridad: hashing de contraseñas y manejo de JWT.
+
+- hash_password / verify_password: bcrypt vía passlib.
+- create_access_token / decode_access_token: JWT con python-jose (HS256).
+
+Separado del router para poder reutilizarse en seeds, tests, etc.
+"""
+
+from datetime import datetime, timedelta, timezone
+
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+from app.core.config import settings
+
+# ─── Hashing (bcrypt) ─────────────────────────────────────────────────────────
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(plain: str) -> str:
+    """Genera el hash bcrypt de una contraseña en texto plano."""
+    return pwd_context.hash(plain)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Verifica una contraseña en texto plano contra su hash bcrypt."""
+    return pwd_context.verify(plain, hashed)
+
+
+# ─── JWT ──────────────────────────────────────────────────────────────────────
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    """
+    Crea un JWT firmado con HS256.
+
+    Payload mínimo esperado:
+        { "sub": username, "role": role }
+
+    Se agrega automáticamente:
+        "type": "access"
+        "exp":  timestamp de expiración
+    """
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    to_encode.update({"type": "access", "exp": expire})
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_access_token(token: str) -> dict | None:
+    """
+    Decodifica y verifica un JWT.
+
+    Retorna el payload si la firma y expiración son válidas,
+    o None si cualquier verificación falla.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "access":
+            return None
+        return payload
+    except JWTError:
+        return None
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\service.py
+──────────────────────────────────────────────────────────────────────
+from typing import Generic, TypeVar, Type
+from fastapi import HTTPException
+from pydantic import BaseModel
+from sqlmodel import SQLModel, Session
+from app.core.unit_of_work import UnitOfWork
+from app.core.repository import BaseRepository
+from datetime import datetime, timezone
+
+ModelType = TypeVar("ModelType", bound=SQLModel)
+CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
+UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
+UoWType = TypeVar("UowType", bound=UnitOfWork)
+RepositoryType = TypeVar("RepositoryType", bound=BaseRepository)
+
+
+
+"""
+
+Aplicacion del service generico en los services particulares
+
+class HeroService(base_service[Hero, HeroCreate, HeroUpdate, HeroUnitOfWork]):
+    def __init__(self, session: Session):
+        super().__init__(session=session,uow_class=HeroUnitOfWork,repo_name="heroes", model_class=Hero)
+
+
+"""
+
+
+class base_service(Generic[ModelType, CreateSchemaType, UpdateSchemaType, UoWType]):
+    def __init__(self, session: Session, uow_class: UoWType, repo_name: str, model_class: Type[ModelType]):
+        self.session = session
+        self.uow = uow_class
+        self.repo = repo_name
+        self.model = model_class
+
+    @property
+    def repo(self) -> BaseRepository[ModelType]:
+        return getattr(self.uow, self.repo)
+
+    def get_all(self, offset: int = 0, limit: int = 20):
+        with self.uow:
+            items = self._repo.get_all_by_state(offset=offset, limit= limit)
+            total = self._repo.count_model()
+            return {"data": items, "total": total}
+        
+    def _get_or_404(self, item_id) -> ModelType:
+        item = self._repo.get_by_id(item_id)
+        if not item or getattr(item, "deleted_at", None) is not None:
+            raise HTTPException(status_code=404, detail=f"{self.model_class.__name__} not found")
+        return item
+
+    def get_by_id(self, item_id: int | str) -> ModelType:
+        with self.uow:
+            return self._get_or_404(item_id)
+        
+    def create(self, item_in: CreateSchemaType) -> ModelType:
+        with self.uow:
+            nuevo_item = self.model_class(**item_in.model_dump())
+            self._repo.add(nuevo_item)
+            return nuevo_item
+        
+    def update(self, item_id: int | str, item_in: UpdateSchemaType) -> ModelType:
+        with self.uow:
+            item_db = self.get_by_id(item_id)
+
+            update_data = item_in.model_dump(exclude_unset=True)
+            for key, value in update_data.items():
+                setattr(item_db, key, value)
+
+            if hasattr(item_db, "updated_at"):
+                item_db.updated_at = datetime.now(timezone.utc)
+
+            self._repo.update(item_db)
+            return item_db
+        
+    def delete(self, item_id: int | str):
+        with self.uow:
+            item_db = self._get_or_404(item_id)
+
+            if hasattr(item_db, "deleted_at"):
+                item_db.deleted_at = datetime.now(timezone.utc)
+                self._repo.update(item_db)
+
+        return {"message": f"{self.model_class.__name__} eliminado/a correctamente"}
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\core\unit_of_work.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session
+from typing import TypeVar
+
+# Creamos un tipo genérico que representa a UnitOfWork o cualquier clase que herede de ella
+U = TypeVar("U", bound="UnitOfWork")
+
+class UnitOfWork:
+    """
+    Gestiona el ciclo de vida de la transacción de base de datos.
+
+    Uso en servicios:
+        with uow:
+            uow.heroes.add(hero)
+            uow.teams.add(team)
+        # commit automático si no hay excepción
+        # rollback automático si hay excepción
+
+    El UoW es la única capa que llama a commit() y rollback().
+    Los repositorios solo llaman a flush() para obtener IDs en memoria.
+    """
+
+    def __init__(self, session: Session) -> None:
+        """
+        Inicializa el UnitOfWork con una sesión activa de base de datos.
+
+        Args:
+            session (Session): Instancia de SQLModel/SQLAlchemy Session.
+                               Representa el contexto de conexión y transacción.
+        """
+        self._session = session
+
+    def __enter__(self: U) -> U:
+        """
+        Método invocado al entrar en el contexto `with`.
+
+        Returns:
+            UnitOfWork: Retorna la propia instancia para operar dentro del bloque.
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """
+        Método invocado al salir del contexto `with`.
+
+        Controla automáticamente la transacción:
+        - Si no hubo excepción → commit()
+        - Si hubo excepción → rollback()
+
+        Args:
+            exc_type: Tipo de excepción (None si no hubo error)
+            exc_val: Valor de la excepción
+            exc_tb: Traceback de la excepción
+        """
+        if exc_type is None:
+            self._session.commit()
+        else:
+            self._session.rollback()
+
+    def commit(self) -> None:
+        """
+        Ejecuta un commit explícito de la transacción actual.
+        """
+        self._session.commit()
+
+    def rollback(self) -> None:
+        """
+        Ejecuta un rollback explícito de la transacción actual.
+        """
+        self._session.rollback()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_1\usuario\models.py
+──────────────────────────────────────────────────────────────────────
+import uuid
+from typing import Optional, List
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column, CHAR
+
+# ==========================================
+# 1. TABLAS INTERMEDIAS (Link Models)
+# ==========================================
+
+class UsuarioRol(SQLModel, table=True):
+    __tablename__ = "usuario_rol"
+    
+    # PK Compuesta
+    usuario_id: uuid.UUID = Field(foreign_key="usuario.id", primary_key=True)
+    rol_codigo: str = Field(foreign_key="rol.codigo", primary_key=True)
+
+    # Atributos extra de la tabla intermedia según UML
+    asignado_por_id: Optional[uuid.UUID] = Field(default=None, foreign_key="usuario.id")
+    expires_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# ==========================================
+# 2. TABLAS PRINCIPALES
+# ==========================================
+
+class Rol(SQLModel, table=True):
+    __tablename__ = "rol"
+    
+    # PK Semántica (El ID es el texto "ADMIN", "CLIENT", etc.)
+    codigo: str = Field(primary_key=True, max_length=20) 
+    nombre: str = Field(unique=True, index=True, max_length=50)
+    descripcion: Optional[str] = None
+    
+    # Relaciones (N:M)
+    usuarios: List["Usuario"] = Relationship(back_populates="roles", link_model=UsuarioRol)
+
+
+class Usuario(SQLModel, table=True):
+    __tablename__ = "usuario"
+    
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    nombre: str = Field(max_length=80)
+    apellido: str = Field(max_length=80)
+    email: str = Field(unique=True, index=True, max_length=254)
+    celular: Optional[str] = Field(default=None, max_length=20)
+    
+    # Se fuerza el uso de CHAR(60) exacto para el hash de bcrypt
+    password_hash: str = Field(sa_column=Column(CHAR(60), nullable=False))
+
+    # Audit (Reemplaza a 'disabled')
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    deleted_at: Optional[datetime] = None
+    
+    # Relaciones
+    roles: List[Rol] = Relationship(back_populates="usuarios", link_model=UsuarioRol)
+    refresh_tokens: List["RefreshToken"] = Relationship(back_populates="usuario")
+    direcciones: List["DireccionEntrega"] = Relationship(back_populates="usuario")
+
+
+# ==========================================
+# 3. ENTIDADES ASOCIADAS (Dominio 1)
+# ==========================================
+
+class RefreshToken(SQLModel, table=True):
+    __tablename__ = "refresh_token"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # usuario_id: int = Field(foreign_key="usuario.id")
+    usuario_id: uuid.UUID = Field(foreign_key="usuario.id")
+    
+    token_hash: str = Field(sa_column=Column(CHAR(64), unique=True, nullable=False))
+    expires_at: datetime
+    revoked_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    usuario: Usuario = Relationship(back_populates="refresh_tokens")
+
+
+class DireccionEntrega(SQLModel, table=True):
+    __tablename__ = "direccion_entrega"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    # usuario_id: int = Field(foreign_key="usuario.id")
+    usuario_id: uuid.UUID = Field(foreign_key="usuario.id")
+    
+    alias: Optional[str] = Field(default=None, max_length=50)
+    linea1: str
+    linea2: Optional[str] = None
+    ciudad: str = Field(max_length=100)
+    provincia: Optional[str] = Field(default=None, max_length=100)
+    codigo_postal: Optional[str] = Field(default=None, max_length=10)
+    latitud: Optional[float] = None
+    longitud: Optional[float] = None
+    es_principal: bool = Field(default=False)
+
+    # Audit
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    deleted_at: Optional[datetime] = None
+
+    usuario: Usuario = Relationship(back_populates="direcciones")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_1\usuario\repository.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional
+from sqlmodel import select, Session
+from app.modules.dominio_1.usuario.models import Usuario, Rol
+from app.core.repository import BaseRepository
+
+class UsuarioRepository(BaseRepository[Usuario]):
+    def __init__(self, session: Session):
+        # Le pasamos la sesión y el modelo al BaseRepository
+        super().__init__(session, Usuario)
+
+    def get_by_email(self, email: str) -> Optional[Usuario]:
+        """Búsqueda específica de este dominio."""
+        statement = select(Usuario).where(Usuario.email == email).where(Usuario.deleted_at.is_(None))
+        return self.session.exec(statement).first()
+
+
+class RolRepository(BaseRepository[Rol]):
+    def __init__(self, session: Session):
+        super().__init__(session, Rol)
+
+    def get_by_codigo(self, codigo: str) -> Optional[Rol]:
+
+        return self.session.get(Rol, codigo)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_1\usuario\routers.py
+──────────────────────────────────────────────────────────────────────
+from typing import Annotated
+from fastapi import APIRouter, Depends, status
+from fastapi.security import OAuth2PasswordRequestForm
+
+from app.core.database import SessionDep
+from app.modules.dominio_1.usuario.schemas import UserCreate, UserPublic, Token
+from app.modules.dominio_1.usuario.service import UsuarioService
+from app.modules.dominio_1.usuario.unit_of_work import UsuarioUnitOfWork
+from app.core.deps import get_current_active_user
+from app.modules.dominio_1.usuario.models import Usuario
+
+router = APIRouter(tags=["Auth & Usuarios"])
+
+def get_usuario_service(session: SessionDep):
+    uow = UsuarioUnitOfWork(session)
+    return UsuarioService(uow)
+
+UsuarioServiceDep = Annotated[UsuarioService, Depends(get_usuario_service)]
+
+@router.post("/auth/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
+def register_user(user_in: UserCreate, service: UsuarioServiceDep):
+    """Registra un nuevo usuario en la tienda."""
+    return service.register(user_in)
+
+@router.post("/auth/token", response_model=Token)
+def login_for_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    service: UsuarioServiceDep
+):
+    """Recibe username y password plano. Devuelve el JWT."""
+    return service.login(form_data)
+
+@router.get("/usuarios/me", response_model=UserPublic)
+def read_users_me(current_user: Annotated[Usuario, Depends(get_current_active_user)]):
+    """
+    Ruta protegida de prueba. 
+    Si envías un JWT válido en el header, te devuelve tus datos.
+    """
+    return current_user
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_1\usuario\schemas.py
+──────────────────────────────────────────────────────────────────────
+from typing import List, Optional
+from pydantic import BaseModel, EmailStr, Field
+import uuid
+
+# --- Sub-Schemas para mostrar en la respuesta pública ---
+class RolPublic(BaseModel):
+    codigo: str
+    nombre: str
+    # descripcion: Optional[str] = None
+
+# --- Entrada de datos (POST /register) ---
+class UserCreate(BaseModel):
+    nombre: str = Field(..., max_length=80)
+    apellido: str = Field(..., max_length=80)
+    email: EmailStr
+    celular: Optional[str] = Field(default=None, max_length=20)
+    password: str = Field(min_length=8)# poner limite
+    
+# --- Salida de datos (GET /me, Respuesta de Login/Register) ---
+class UserPublic(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    apellido: str
+    email: str
+    celular: Optional[str] = None
+    roles: List[RolPublic] = [] 
+    
+
+# --- Respuesta del Login ---
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_1\usuario\service.py
+──────────────────────────────────────────────────────────────────────
+import hashlib
+from app.core.config import settings
+from datetime import datetime, timedelta, timezone
+from fastapi import HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from typing import List
+
+from app.modules.dominio_1.usuario.unit_of_work import UsuarioUnitOfWork
+from app.modules.dominio_1.usuario.schemas import UserCreate, Token
+from app.modules.dominio_1.usuario.models import Rol,Usuario, RefreshToken
+from app.core.security import hash_password, verify_password, create_access_token
+
+class UsuarioService:
+    def __init__(self, uow: UsuarioUnitOfWork):
+        self.uow = uow
+
+    def _crear_usuario_core(self, user_in: UserCreate, roles: List[Rol]) -> Usuario:
+        """
+        Método interno centralizado. 
+        Maneja hashing, validación de email y persistencia.
+        """
+        # La verificación de email se hace aquí para que afecte a ambos flujos
+        if self.uow.usuarios.get_by_email(user_in.email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El email ya está registrado"
+            )
+
+        nuevo_usuario = Usuario(
+            nombre=user_in.nombre,
+            apellido=user_in.apellido,
+            email=user_in.email,
+            celular=user_in.celular,
+            password_hash=hash_password(user_in.password),
+            roles=roles
+        )
+        
+        return self.uow.usuarios.add(nuevo_usuario)
+
+    # ==========================================
+    # --- FLUJOS PÚBLICOS Y ADMINISTRATIVOS ---
+    # ==========================================
+
+    def register(self, user_in: UserCreate) -> Usuario:
+        """Flujo para clientes: setea rol 'CLIENT' automáticamente."""
+        with self.uow:
+            rol_default = self.uow.roles.get_by_codigo("CLIENT")
+            if not rol_default:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Configuración de sistema inválida: Rol 'CLIENT' no existe."
+                )
+            return self._crear_usuario_core(user_in, [rol_default])
+
+    def create_user_admin(self, user_in: UserCreate, roles_codigos: List[str]) -> Usuario:
+        """Flujo para Admin: permite especificar una lista de códigos de roles."""
+        with self.uow:
+            objetos_roles = []
+            for codigo in roles_codigos:
+                rol = self.uow.roles.get_by_codigo(codigo)
+                if not rol:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"El código de rol '{codigo}' no es válido."
+                    )
+                objetos_roles.append(rol)
+            
+            return self._crear_usuario_core(user_in, objetos_roles)
+        
+
+
+    def login(self, form_data: OAuth2PasswordRequestForm) -> Token:
+        email_ingresado = form_data.username 
+        password_ingresada = form_data.password
+
+        with self.uow as uow:
+            user = uow.usuarios.get_by_email(email_ingresado)
+            
+            # Validamos existencia, clave y que no esté baneado
+            if not user or not verify_password(password_ingresada, user.password_hash) or user.deleted_at:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Credenciales incorrectas",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+            # --- GENERACIÓN DE TOKENS ---
+            
+            # 1. Access Token
+            roles_codigos = [rol.codigo for rol in user.roles]
+            access_token = create_access_token(
+                data={"sub": user.id, "roles": roles_codigos}
+            )
+
+            # 2. Refresh Token
+            token_hash = hashlib.sha256(access_token.encode()).hexdigest()
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+            nuevo_rt = RefreshToken(
+                usuario_id=user.id,
+                token_hash=token_hash,
+                expires_at=expires_at
+            )
+            
+            uow.session.add(nuevo_rt) 
+
+            return Token(
+                access_token=access_token,
+                token_type="bearer",
+                expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            )
+
+    # ==========================================
+    # --- FLUJO DE ADMIN (Privado) ---
+    # ==========================================
+
+    def obtener_todos_los_usuarios(self):
+        """Lista usuarios omitiendo los que tienen borrado lógico."""
+        with self.uow as uow:
+            return uow.usuarios.get_all_active()
+        
+
+    def desactivar_usuario(self, usuario_id: int):
+        """Aplica el borrado lógico (Baneo)."""
+        with self.uow as uow:
+            user = uow.usuarios.get_by_id(usuario_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, 
+                    detail="Usuario no encontrado"
+                )
+            
+            user.deleted_at = datetime.now(timezone.utc)
+            uow.commit()
+            return {"mensaje": f"Usuario {user.email} desactivado correctamente"}
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_1\usuario\unit_of_work.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session
+from app.core.unit_of_work import UnitOfWork
+from app.modules.dominio_1.usuario.repository import UsuarioRepository, RolRepository
+
+class UsuarioUnitOfWork(UnitOfWork):
+    def __init__(self, session: Session):
+        super().__init__(session)
+        self.usuarios = UsuarioRepository(session)
+        self.roles = RolRepository(session)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\categoria\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\categoria\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List, TYPE_CHECKING
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field, Relationship
+
+if TYPE_CHECKING:
+    from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+
+class Categoria(SQLModel, table=True):
+    __tablename__ = "categorias"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Auto-referencia para subcategorías (0..1 a parent)
+    parent_id: Optional[int] = Field(default=None, foreign_key="categorias.id")
+    
+    nombre: str = Field(max_length=100, unique=True, index=True)
+    descripcion: Optional[str] = None
+    imagen_url: Optional[str] = None
+
+    # Audit
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    deleted_at: Optional[datetime] = None
+
+    # Relaciones auto-referenciales
+    # Con esto creo una lista de adyacencia ajjajaajja
+    parent: Optional["Categoria"] = Relationship(
+        back_populates="hijos",
+        sa_relationship_kwargs={"remote_side": "Categoria.id"}
+    )
+    hijos: List["Categoria"] = Relationship(back_populates="parent")
+
+    # Relación a la tabla intermedia
+    productos_links: List["ProductoCategoria"] = Relationship(back_populates="categoria")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\categoria\repository.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session, select, func
+from sqlalchemy.orm import selectinload
+from app.core.repository import BaseRepository
+from app.modules.dominio_2.categoria.models import Categoria
+from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+from typing import Optional
+
+class CategoriaRepository(BaseRepository[Categoria]):
+    def __init__(self, session: Session) -> None:
+        super().__init__(session, Categoria)
+
+    def get_by_id(self, record_id: int) -> Optional[Categoria]:
+        statement = (
+            select(Categoria)
+            .where(Categoria.id == record_id)
+            .options(
+                selectinload(Categoria.parent),
+                selectinload(Categoria.hijos),
+                selectinload(Categoria.productos_links)
+                .selectinload(ProductoCategoria.producto)
+                )
+        )
+        return self.session.exec(statement).first()
+
+    def get_by_nombre(self, nombre: str) -> Optional[Categoria]:
+        return self.session.exec(
+            select(Categoria).where(Categoria.nombre == nombre)
+        ).first()
+
+    def get_active(self, offset: int = 0, limit: int = 20) -> list[Categoria]:
+        return list(
+            self.session.exec(
+                select(Categoria)
+                .where(Categoria.deleted_at.is_(None))
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        )
+
+    def count_active(self) -> int:
+        return self.session.exec(
+            select(func.count()).select_from(Categoria).where(Categoria.deleted_at.is_(None))
+        ).one()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\categoria\router.py
+──────────────────────────────────────────────────────────────────────
+from typing import Annotated
+from fastapi import APIRouter, Depends, Query, status
+from app.core.database import SessionDep
+from app.modules.dominio_2.categoria.schemas import CategoriaRead, CategoriaCreate, CategoriaUpdate, CategoriaList, CategoriaWithChildren
+from app.modules.dominio_2.categoria.service import CategoriaService
+from app.modules.dominio_2.categoria.unit_of_work import CategoriaUnitOfWork
+
+router = APIRouter(prefix="/categorias", tags=["Categorías"])
+
+def get_categoria_service(session: SessionDep):
+    uow = CategoriaUnitOfWork(session)
+    return CategoriaService(uow)
+
+CategoriaServiceDep = Annotated[CategoriaService, Depends(get_categoria_service)]
+
+@router.get("/", response_model=CategoriaList)
+def list_categorias(
+    service: CategoriaServiceDep,
+    offset: Annotated[int, Query(ge=0, description="Registros a omitir")] = 0,
+    limit: Annotated[int, Query(ge=1, le=100, description="Máximo de registros")] = 20
+):
+    return service.get_all(offset=offset, limit=limit)
+
+@router.get("/{id}", response_model=CategoriaWithChildren)
+def get_categoria(id: int, service: CategoriaServiceDep):
+    return service.get_by_id(id)
+
+@router.post("/", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED)
+def create_categoria(categoria_in: CategoriaCreate, service: CategoriaServiceDep):
+    return service.create(categoria_in)
+
+@router.put("/{id}", response_model=CategoriaRead)
+def update_categoria(id: int, categoria_in: CategoriaUpdate, service: CategoriaServiceDep):
+    return service.update(id, categoria_in)
+
+@router.delete("/{id}", status_code=status.HTTP_200_OK)
+def delete_categoria(id: int, service: CategoriaServiceDep):
+    return service.delete(id)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\categoria\schemas.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List
+from sqlmodel import SQLModel, Field
+from datetime import datetime
+from pydantic import BaseModel
+
+# --- Esquemas auxiliares para las relaciones ---
+class ProductoMin(BaseModel):
+    id: int
+    nombre: str
+    precio_base: float
+
+class CategoriaProductoLink(BaseModel):
+    producto_id: int
+    es_principal: bool
+    producto: Optional[ProductoMin] = None
+
+# --- Base y Entrada ---
+class CategoriaBase(SQLModel):
+    nombre: str = Field(min_length=2, max_length=100)
+    descripcion: Optional[str] = None
+    imagen_url: Optional[str] = None
+    parent_id: Optional[int] = None
+
+class CategoriaCreate(CategoriaBase):
+    pass
+
+class CategoriaUpdate(SQLModel):
+    nombre: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    descripcion: Optional[str] = None
+    imagen_url: Optional[str] = None
+    parent_id: Optional[int] = None
+
+# --- Salida ---
+class CategoriaRead(CategoriaBase):
+    id: int
+    deleted_at : Optional[datetime]
+
+class CategoriaList(SQLModel):
+    """Respuesta paginada según el estándar de la unidad 4-actividad 1-endpoinds optimizados"""
+    data: List[CategoriaRead]
+    total: int
+
+class CategoriaWithChildren(CategoriaRead):
+    """Para mostrar el árbol en el Frontend"""
+    parent: Optional["CategoriaRead"] = None
+    hijos: List["CategoriaRead"] = []
+    productos_links: List[CategoriaProductoLink] = []
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\categoria\service.py
+──────────────────────────────────────────────────────────────────────
+from datetime import datetime, timezone
+from fastapi import HTTPException, status
+from app.modules.dominio_2.categoria.models import Categoria
+from app.modules.dominio_2.categoria.schemas import CategoriaCreate, CategoriaUpdate
+from app.modules.dominio_2.categoria.unit_of_work import CategoriaUnitOfWork
+
+class CategoriaService:
+    def __init__(self, uow: CategoriaUnitOfWork):
+        self.uow = uow
+
+    def get_all(self, offset: int = 0, limit: int = 20):
+        """
+        Devuelve la estructura exacta que pide el Schema de paginación (data y total).
+        """
+        with self.uow as uow:
+            categorias = uow.categorias.get_active(offset=offset, limit=limit)
+            total = uow.categorias.count_active()
+            return {"data": categorias, "total": total}
+
+    def get_by_id(self, categoria_id: int):
+        with self.uow as uow:
+            categoria = uow.categorias.get_by_id(categoria_id)
+            # Validamos que exista y que no esté borrada lógicamente
+            if not categoria or categoria.deleted_at is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Categoría con id {categoria_id} no encontrada."
+                )
+        return categoria
+
+    def create(self, categoria_in: CategoriaCreate):
+        with self.uow as uow:
+            # 1. Validar que no exista una categoría con el mismo nombre (Activa)
+            existe = uow.categorias.get_by_nombre(categoria_in.nombre)
+            if existe and existe.deleted_at is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Ya existe una categoría activa con el nombre '{categoria_in.nombre}'."
+                )
+            
+            # 2. Si nos mandan un parent_id, hay que validar que esa categoría "padre" exista
+            if categoria_in.parent_id:
+                parent = uow.categorias.get_by_id(categoria_in.parent_id)
+                if not parent or parent.deleted_at is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"La categoría padre con id {categoria_in.parent_id} no existe."
+                    )
+
+            # 3. Mapear schema a modelo y guardar
+            nueva_categoria = Categoria(**categoria_in.model_dump())
+            uow.categorias.add(nueva_categoria)
+            # El UnitOfWork hace el commit automáticamente al salir del bloque "with"
+        return nueva_categoria
+
+    def update(self, categoria_id: int, categoria_in: CategoriaUpdate):
+        with self.uow as uow:
+            # 1. Traer la original (reutilizamos el método get_by_id que ya lanza el 404)
+            categoria_db = self.get_by_id(categoria_id)
+
+            # 2. Si cambia el nombre, validar que el nuevo no choque con otro existente
+            if categoria_in.nombre and categoria_in.nombre != categoria_db.nombre:
+                existe = uow.categorias.get_by_nombre(categoria_in.nombre)
+                if existe and existe.deleted_at is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="El nombre ya está en uso por otra categoría."
+                    )
+
+            # 3. Si cambia el padre, validar que exista y que no se asigne a sí misma
+            if categoria_in.parent_id is not None and categoria_in.parent_id != categoria_db.parent_id:
+                if categoria_in.parent_id == categoria_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Una categoría no puede ser padre de sí misma."
+                    )
+                parent = uow.categorias.get_by_id(categoria_in.parent_id)
+                if not parent or parent.deleted_at is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="La nueva categoría padre no existe."
+                    )
+
+            # 4. Aplicar cambios solo de los campos que se enviaron
+            update_data = categoria_in.model_dump(exclude_unset=True)
+            for key, value in update_data.items():
+                setattr(categoria_db, key, value)
+            
+            categoria_db.updated_at = datetime.now(timezone.utc)
+            uow.categorias.update(categoria_db)
+        return categoria_db
+
+    def delete(self, categoria_id: int):
+        with self.uow as uow:
+            categoria_db = self.get_by_id(categoria_id)
+            
+            # Aplicamos el BORRADO LÓGICO
+            categoria_db.deleted_at = datetime.now(timezone.utc)
+            uow.categorias.update(categoria_db)
+            
+        return {"mensaje": f"Categoría {categoria_id} eliminada correctamente"}
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\categoria\unit_of_work.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session
+from app.core.unit_of_work import UnitOfWork
+from app.modules.dominio_2.categoria.repository import CategoriaRepository
+
+class CategoriaUnitOfWork(UnitOfWork):
+    def __init__(self, session: Session):
+        super().__init__(session)
+        self.categorias = CategoriaRepository(session)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\ingrediente\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\ingrediente\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List, TYPE_CHECKING
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field, Relationship
+
+if TYPE_CHECKING:
+    from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
+
+class Ingrediente(SQLModel, table=True):
+    __tablename__ = "ingredientes"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nombre: str = Field(max_length=100, unique=True, index=True)
+    descripcion: Optional[str] = None
+    es_alergeno: bool = Field(default=False)
+
+    # Audit
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    deleted_at: Optional[datetime] = None
+    
+    # Relación a la tabla intermedia
+    productos_links: List["ProductoIngrediente"] = Relationship(back_populates="ingrediente")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\ingrediente\repository.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session, select, func
+from sqlalchemy.orm import selectinload
+from app.core.repository import BaseRepository
+from app.modules.dominio_2.ingrediente.models import Ingrediente
+from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
+from typing import Optional
+
+class IngredienteRepository(BaseRepository[Ingrediente]):
+    def __init__(self, session: Session) -> None:
+        super().__init__(session, Ingrediente)
+
+    def get_by_id(self, record_id: int) -> Optional[Ingrediente]:
+        statement = (
+            select(Ingrediente)
+            .where(Ingrediente.id == record_id)
+            .options(
+                selectinload(Ingrediente.productos_links)
+                .selectinload(ProductoIngrediente.producto)
+                )
+        )
+        return self.session.exec(statement).first()
+
+    def get_by_nombre(self, nombre: str) -> Optional[Ingrediente]:
+        return self.session.exec(
+            select(Ingrediente).where(Ingrediente.nombre == nombre)
+        ).first()
+
+    def get_active(self, offset: int = 0, limit: int = 20) -> list[Ingrediente]:
+        return list(
+            self.session.exec(
+                select(Ingrediente)
+                .where(Ingrediente.deleted_at.is_(None))
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        )
+
+    def count_active(self) -> int:
+        return self.session.exec(
+            select(func.count())
+            .select_from(Ingrediente)
+            .where(Ingrediente.deleted_at.is_(None))
+        ).one()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\ingrediente\router.py
+──────────────────────────────────────────────────────────────────────
+from typing import Annotated
+from fastapi import APIRouter, Depends, Query, status
+from app.core.database import SessionDep
+from app.modules.dominio_2.ingrediente.schemas import IngredienteRead, IngredienteCreate, IngredienteUpdate, IngredienteList, IngredienteFullRead
+from app.modules.dominio_2.ingrediente.service import IngredienteService
+from app.modules.dominio_2.ingrediente.unit_of_work import IngredienteUnitOfWork
+
+router = APIRouter(prefix="/ingredientes", tags=["Ingredientes"])
+
+def get_ingrediente_service(session: SessionDep):
+    uow = IngredienteUnitOfWork(session)
+    return IngredienteService(uow)
+
+IngredienteServiceDep = Annotated[IngredienteService, Depends(get_ingrediente_service)]
+
+@router.get("/", response_model=IngredienteList)
+def list_ingredientes(
+    service: IngredienteServiceDep,
+    offset: Annotated[int, Query(ge=0, description="Registros a omitir")] = 0,
+    limit: Annotated[int, Query(ge=1, le=100, description="Máximo de registros")] = 20
+):
+    return service.get_all(offset=offset, limit=limit)
+
+@router.get("/{id}", response_model=IngredienteFullRead)
+def get_ingrediente(id: int, service: IngredienteServiceDep):
+    return service.get_by_id(id)
+
+@router.post("/", response_model=IngredienteRead, status_code=status.HTTP_201_CREATED)
+def create_ingrediente(ingrediente_in: IngredienteCreate, service: IngredienteServiceDep):
+    return service.create(ingrediente_in)
+
+@router.put("/{id}", response_model=IngredienteRead)
+def update_ingrediente(id: int, ingrediente_in: IngredienteUpdate, service: IngredienteServiceDep):
+    return service.update(id, ingrediente_in)
+
+@router.delete("/{id}", status_code=status.HTTP_200_OK)
+def delete_ingrediente(id: int, service: IngredienteServiceDep):
+    return service.delete(id)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\ingrediente\schemas.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List
+from sqlmodel import SQLModel, Field
+from pydantic import BaseModel
+
+# --- Esquemas auxiliares para las relaciones ---
+class ProductoMin(BaseModel):
+    id: int
+    nombre: str
+
+class IngredienteProductoLink(BaseModel):
+    producto_id: int
+    es_removible: bool
+    producto: Optional[ProductoMin] = None
+
+
+# --- Base y Entrada ---
+class IngredienteBase(SQLModel):
+    nombre: str = Field(min_length=2, max_length=100)
+    descripcion: Optional[str] = None
+    es_alergeno: bool = False
+
+class IngredienteCreate(IngredienteBase):
+    pass
+
+class IngredienteUpdate(SQLModel):
+    nombre: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    descripcion: Optional[str] = None
+    es_alergeno: Optional[bool] = None
+
+
+class IngredienteRead(IngredienteBase):
+    id: int
+
+class IngredienteList(SQLModel):
+    data: List[IngredienteRead]
+    total: int
+
+class IngredienteFullRead(IngredienteRead):
+    productos_links: List[IngredienteProductoLink] = []
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\ingrediente\service.py
+──────────────────────────────────────────────────────────────────────
+from datetime import datetime, timezone
+from fastapi import HTTPException, status
+from app.modules.dominio_2.ingrediente.models import Ingrediente
+from app.modules.dominio_2.ingrediente.schemas import IngredienteCreate, IngredienteUpdate
+from app.modules.dominio_2.ingrediente.unit_of_work import IngredienteUnitOfWork
+
+class IngredienteService:
+    def __init__(self, uow: IngredienteUnitOfWork):
+        self.uow = uow
+
+    def get_all(self, offset: int = 0, limit: int = 20):
+        with self.uow as uow:
+            ingredientes = uow.ingredientes.get_active(offset=offset, limit=limit)
+            total = uow.ingredientes.count_active()
+        return {"data": ingredientes, "total": total}
+
+    def get_by_id(self, ingrediente_id: int):
+        with self.uow as uow:
+            ingrediente = uow.ingredientes.get_by_id(ingrediente_id)
+            if not ingrediente or ingrediente.deleted_at is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, 
+                    detail="Ingrediente no encontrado"
+                )
+        return ingrediente
+
+    def create(self, ingrediente_in: IngredienteCreate):
+        with self.uow as uow:
+            if uow.ingredientes.get_by_nombre(ingrediente_in.nombre):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, 
+                    detail="El ingrediente ya existe"
+                )
+            
+            nuevo_ingrediente = Ingrediente(**ingrediente_in.model_dump())
+            uow.ingredientes.add(nuevo_ingrediente)
+        return nuevo_ingrediente
+
+    def update(self, ingrediente_id: int, ingrediente_in: IngredienteUpdate):
+        with self.uow as uow:
+            ingrediente_db = self.get_by_id(ingrediente_id)
+            
+            update_data = ingrediente_in.model_dump(exclude_unset=True)
+            for key, value in update_data.items():
+                setattr(ingrediente_db, key, value)
+            
+            ingrediente_db.updated_at = datetime.now(timezone.utc)
+            uow.ingredientes.update(ingrediente_db)
+        return ingrediente_db
+
+    def delete(self, ingrediente_id: int):
+        with self.uow as uow:
+            ingrediente_db = self.get_by_id(ingrediente_id)
+            
+            # 
+            ingrediente_db.deleted_at = datetime.now(timezone.utc)
+            uow.ingredientes.update(ingrediente_db)
+        return {"mensaje": f"Ingrediente {ingrediente_id} eliminado correctamente"}
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\ingrediente\unit_of_work.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session
+from app.core.unit_of_work import UnitOfWork
+from app.modules.dominio_2.ingrediente.repository import IngredienteRepository
+
+class IngredienteUnitOfWork(UnitOfWork):
+    def __init__(self, session: Session):
+        super().__init__(session)
+        self.ingredientes = IngredienteRepository(session)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List, TYPE_CHECKING
+from datetime import datetime, timezone
+from decimal import Decimal
+from sqlmodel import SQLModel, Field, Relationship, Column, ARRAY, Text, Numeric
+
+if TYPE_CHECKING:
+    from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+    from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
+
+class Producto(SQLModel, table=True):
+    __tablename__ = "productos"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nombre: str = Field(max_length=150, index=True)
+    descripcion: Optional[str] = None
+    
+    # Manejo de array y decimal con SQLAlchemy puro dentro de SQLModel
+    precio_base: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    imagenes_url: List[str] = Field(sa_column=Column(ARRAY(Text)), default=[])
+    
+    stock_cantidad: int = Field(default=0, ge=0)
+    disponible: bool = Field(default=True)
+
+    # Audit
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    deleted_at: Optional[datetime] = None
+
+    # Relaciones a las tablas intermedias
+    categorias_links: List["ProductoCategoria"] = Relationship(back_populates="producto")
+    ingredientes_links: List["ProductoIngrediente"] = Relationship(back_populates="producto")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto\repository.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session, select, func
+from sqlalchemy.orm import selectinload
+from app.core.repository import BaseRepository
+from app.modules.dominio_2.producto.models import Producto
+from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
+from typing import Optional
+
+class ProductoRepository(BaseRepository[Producto]):
+    def __init__(self, session: Session) -> None:
+        super().__init__(session, Producto)
+
+    def get_by_id(self, record_id: int) -> Optional[Producto]:
+        statement = (
+            select(Producto)
+            .where(Producto.id == record_id)
+            .options(
+                selectinload(Producto.categorias_links).selectinload(ProductoCategoria.categoria),
+                selectinload(Producto.ingredientes_links).selectinload(ProductoIngrediente.ingrediente)
+            )
+        )
+        return self.session.exec(statement).first()
+
+    def get_by_nombre(self, nombre: str) -> Optional[Producto]:
+        return self.session.exec(
+            select(Producto).where(Producto.nombre == nombre)
+        ).first()
+
+    def get_active(self, offset: int = 0, limit: int = 20,categoria_id: Optional[list[int]] = None,ingrediente_id: Optional[list[int]] = None) -> list[Producto]:
+        query = select(Producto).where(Producto.deleted_at.is_(None))
+        if categoria_id:
+            query = query.join(ProductoCategoria).where(ProductoCategoria.categoria_id.in_(categoria_id))
+        if ingrediente_id:
+            query = query.join(ProductoIngrediente).where(ProductoIngrediente.ingrediente_id.in_(ingrediente_id))
+        return list(self.session.exec(query.offset(offset).limit(limit)).all())
+
+
+    def count_active(self,categoria_id: Optional[list[int]] = None,ingrediente_id: Optional[list[int]] = None) -> int:
+        query = select(func.count()).select_from(Producto).where(Producto.deleted_at.is_(None))
+        if categoria_id:
+            query = query.join(ProductoCategoria).where(ProductoCategoria.categoria_id.in_(categoria_id))
+        if ingrediente_id:
+            query = query.join(ProductoIngrediente).where(ProductoIngrediente.ingrediente_id.in_(ingrediente_id))
+        return self.session.exec(query).one()
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto\router.py
+──────────────────────────────────────────────────────────────────────
+from typing import Annotated, Optional, List
+from fastapi import APIRouter, Depends, Query, status
+from app.core.database import SessionDep
+from app.modules.dominio_2.producto.schemas import ProductoRead, ProductoCreate, ProductoUpdate, ProductoList, ProductoFullRead
+from app.modules.dominio_2.producto.service import ProductoService
+from app.modules.dominio_2.producto.unit_of_work import ProductoUnitOfWork
+
+router = APIRouter(prefix="/productos", tags=["Productos"])
+
+def get_producto_service(session: SessionDep):
+    uow = ProductoUnitOfWork(session)
+    return ProductoService(uow)
+
+ProductoServiceDep = Annotated[ProductoService, Depends(get_producto_service)]
+
+@router.get("/", response_model=ProductoList)
+def list_productos(
+    service: ProductoServiceDep,
+    offset: Annotated[int, Query(ge=0, description="Registros a omitir")] = 0,
+    limit: Annotated[int, Query(ge=1, le=100, description="Máximo de registros")] = 20,
+    categoria_id: Annotated[Optional[List[int]], Query(description="Filtrar por IDs de Categoría")] = None,
+    ingrediente_id: Annotated[Optional[List[int]], Query(description="Filtrar por IDs de Ingrediente")] = None
+):
+    return service.get_all(
+        offset=offset, 
+        limit=limit, 
+        categoria_id=categoria_id, 
+        ingrediente_id=ingrediente_id
+    )
+
+@router.get("/{id}", response_model=ProductoFullRead)
+def get_producto(id: int, service: ProductoServiceDep):
+    return service.get_by_id(id)
+
+@router.post("/", response_model=ProductoRead, status_code=status.HTTP_201_CREATED)
+def create_producto(producto_in: ProductoCreate, service: ProductoServiceDep):
+    return service.create(producto_in)
+
+@router.put("/{id}", response_model=ProductoRead)
+def update_producto(id: int, producto_in: ProductoUpdate, service: ProductoServiceDep):
+    return service.update(id, producto_in)
+
+@router.delete("/{id}", status_code=status.HTTP_200_OK)
+def delete_producto(id: int, service: ProductoServiceDep):
+    return service.delete(id)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto\schemas.py
+──────────────────────────────────────────────────────────────────────
+from typing import Optional, List
+from decimal import Decimal
+from sqlmodel import SQLModel, Field
+from pydantic import BaseModel
+
+from app.modules.dominio_2.categoria.schemas import CategoriaRead
+from app.modules.dominio_2.ingrediente.schemas import IngredienteRead
+
+# --- Esquemas para los "Links" (Tablas intermedias) ---
+class ProductoIngredienteRead(BaseModel):
+    ingrediente_id: int
+    es_removible: bool
+    # Agregamos la relación para ver el nombre y descripción del ingrediente
+    ingrediente: Optional[IngredienteRead] = None 
+
+    class Config:
+        from_attributes = True
+
+class ProductoCategoriaRead(BaseModel):
+    categoria_id: int
+    es_principal: bool
+    # Agregamos la relación para ver el nombre de la categoría
+    categoria: Optional[CategoriaRead] = None
+
+    class Config:
+        from_attributes = True
+
+# --- Producto principal ---
+class ProductoBase(SQLModel):
+    nombre: str = Field(min_length=2, max_length=150)
+    descripcion: Optional[str] = None
+    precio_base: Decimal
+    imagenes_url: List[str] = []
+    stock_cantidad: int = 0
+    disponible: bool = True
+
+class ProductoCreate(ProductoBase):
+    categoria_ids: List[int] = []
+    ingrediente_ids: List[int] = []
+
+class ProductoUpdate(SQLModel):
+    nombre: Optional[str] = Field(default=None, min_length=2, max_length=150)
+    precio_base: Optional[Decimal] = Field(default=None, ge=0)
+    stock_cantidad: Optional[int] = Field(default=None, ge=0)
+    disponible: Optional[bool] = None
+
+class ProductoRead(ProductoBase):
+    id: int
+
+class ProductoList(SQLModel):
+    data: List[ProductoRead]
+    total: int
+
+class ProductoFullRead(ProductoRead):
+    """
+    Respuesta completa con relaciones para el detalle del producto.    """
+    categorias_links: List[ProductoCategoriaRead] = []
+    ingredientes_links: List[ProductoIngredienteRead] = []
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto\service.py
+──────────────────────────────────────────────────────────────────────
+from datetime import datetime, timezone
+from fastapi import HTTPException
+from app.modules.dominio_2.producto.models import Producto
+from app.modules.dominio_2.producto_categoria.models import ProductoCategoria
+from app.modules.dominio_2.producto_ingrediente.models import ProductoIngrediente
+from app.modules.dominio_2.producto.schemas import ProductoCreate, ProductoUpdate
+from app.modules.dominio_2.producto.unit_of_work import ProductoUnitOfWork
+from typing import Optional, List
+
+class ProductoService:
+    def __init__(self, uow: ProductoUnitOfWork):
+        self.uow = uow
+
+    def get_all(self, offset: int = 0, limit: int = 20,categoria_id: Optional[List[int]] = None,ingrediente_id: Optional[List[int]] = None):
+        with self.uow as uow:
+            productos = uow.productos.get_active(offset=offset, limit=limit, categoria_id=categoria_id, ingrediente_id=ingrediente_id)
+            total = uow.productos.count_active(
+                categoria_id=categoria_id, 
+                ingrediente_id=ingrediente_id
+            )
+        return {"data": productos, "total": total}
+        
+    def get_by_id(self, producto_id: int):
+        with self.uow as uow:
+            producto = uow.productos.get_by_id(producto_id)
+            if not producto or producto.deleted_at is not None:
+                raise HTTPException(
+                    status_code=404, detail="Producto no encontrado"
+                )
+
+        return producto
+
+    def create(self, producto_in: ProductoCreate):
+        with self.uow as uow:
+            # 1. Validar nombre duplicado
+            if uow.productos.get_by_nombre(producto_in.nombre):
+                raise HTTPException(status_code=409, detail="El producto ya existe")
+
+            # 2. Crear instancia base (sin las listas de IDs)
+            producto_data = producto_in.model_dump(exclude={"categoria_ids", "ingrediente_ids"})
+            nuevo_producto = Producto(**producto_data)
+            uow.productos.add(nuevo_producto) 
+
+            # 3. Relaciones Complejas: Categorías
+            for idx, cat_id in enumerate(producto_in.categoria_ids):
+                categoria = uow.categorias.get_by_id(cat_id)
+                if not categoria:
+                    raise HTTPException(status_code=400, detail=f"Categoría {cat_id} no existe")
+                
+                # Definimos la primer categoria como principal por defecto
+                es_principal = True if idx == 0 else False
+                link_cat = ProductoCategoria(producto_id=nuevo_producto.id, categoria_id=cat_id, es_principal=es_principal)
+                uow._session.add(link_cat)
+
+            # 4. Relaciones Complejas: Ingredientes
+            for ing_id in producto_in.ingrediente_ids:
+                ingrediente = uow.ingredientes.get_by_id(ing_id)
+                if not ingrediente:
+                    raise HTTPException(status_code=400, detail=f"Ingrediente {ing_id} no existe")
+                
+                link_ing = ProductoIngrediente(producto_id=nuevo_producto.id, ingrediente_id=ing_id)
+                uow._session.add(link_ing)
+
+        return nuevo_producto
+        
+    def update(self, producto_id: int, producto_in: ProductoUpdate):
+        with self.uow as uow:
+            producto_db = uow.productos.get_by_id(producto_id)
+            if not producto_db or producto_db.deleted_at is not None:
+                raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+            update_data = producto_in.model_dump(exclude_unset=True)
+            for key, value in update_data.items():
+                setattr(producto_db, key, value)
+            
+            producto_db.updated_at = datetime.now(timezone.utc)
+            uow.productos.update(producto_db)
+        return producto_db
+
+    def delete(self, producto_id: int):
+        with self.uow as uow:
+            producto = uow.productos.get_by_id(producto_id)
+            if not producto:
+                raise HTTPException(status_code=404, detail="Producto no encontrado")
+            
+            producto.deleted_at = datetime.now(timezone.utc)
+            uow.productos.update(producto)
+        return {"mensaje": "Producto eliminado (lógico)"}
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto\unit_of_work.py
+──────────────────────────────────────────────────────────────────────
+from sqlmodel import Session
+from app.core.unit_of_work import UnitOfWork
+from app.modules.dominio_2.producto.repository import ProductoRepository
+from app.modules.dominio_2.categoria.repository import CategoriaRepository
+from app.modules.dominio_2.ingrediente.repository import IngredienteRepository
+
+class ProductoUnitOfWork(UnitOfWork):
+    def __init__(self, session: Session):
+        super().__init__(session)
+        self.productos = ProductoRepository(session)
+        self.categorias = CategoriaRepository(session)
+        self.ingredientes = IngredienteRepository(session)
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto_categoria\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto_categoria\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import TYPE_CHECKING
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import PrimaryKeyConstraint, Column, ForeignKey, Integer
+
+if TYPE_CHECKING:
+    from app.modules.dominio_2.producto.models import Producto
+    from app.modules.dominio_2.categoria.models import Categoria
+
+class ProductoCategoria(SQLModel, table=True):
+    __tablename__ = "producto_categoria"
+
+    # Clave primaria compuesta
+    __table_args__ = (PrimaryKeyConstraint("producto_id", "categoria_id"),)
+
+    producto_id: int = Field(sa_column=Column(Integer, ForeignKey("productos.id", ondelete="CASCADE"), nullable=False))
+    categoria_id: int = Field(sa_column=Column(Integer, ForeignKey("categorias.id", ondelete="CASCADE"), nullable=False))
+    
+    es_principal: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Relaciones directas 
+    producto: "Producto" = Relationship(back_populates="categorias_links")
+    categoria: "Categoria" = Relationship(back_populates="productos_links")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto_ingrediente\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\modules\dominio_2\producto_ingrediente\models.py
+──────────────────────────────────────────────────────────────────────
+from typing import TYPE_CHECKING
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import PrimaryKeyConstraint, Column, ForeignKey, Integer
+
+if TYPE_CHECKING:
+    from app.modules.dominio_2.producto.models import Producto
+    from app.modules.dominio_2.ingrediente.models import Ingrediente
+
+class ProductoIngrediente(SQLModel, table=True):
+    __tablename__ = "producto_ingrediente"
+
+    # Clave primaria compuesta
+    __table_args__ = (PrimaryKeyConstraint("producto_id", "ingrediente_id"),)
+
+    producto_id: int = Field(sa_column=Column(Integer, ForeignKey("productos.id", ondelete="CASCADE"), nullable=False))
+    ingrediente_id: int = Field(sa_column=Column(Integer, ForeignKey("ingredientes.id", ondelete="CASCADE"), nullable=False))
+    
+    es_removible: bool = Field(default=False)
+
+    # Relaciones directas
+    producto: "Producto" = Relationship(back_populates="ingredientes_links")
+    ingrediente: "Ingrediente" = Relationship(back_populates="productos_links")
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\utils\__init__.py
+──────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────────────────────────────────
+ARCHIVO: app\utils\errores.py
+──────────────────────────────────────────────────────────────────────
+from fastapi import Request, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+async def manejar_validaciones(request: Request, exc: RequestValidationError):
+    detalles = exc.errors()
+    primer_error = detalles[0]
+
+    mensaje = f"Error de validación en el campo: {primer_error['loc'][-1]} - {primer_error['msg']}"
+    return JSONResponse(
+        status_code=422,
+        content={"mensaje": mensaje, "codigo": 422}
+    )
+
+async def manejar_http_exceptions(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"mensaje": exc.detail, "codigo": exc.status_code}
+    )
